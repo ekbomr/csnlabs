@@ -16,6 +16,13 @@
 #include <limits.h>
 #include <unistd.h>
 
+//Our include headers
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+
 //--//////////////////////////////////////////////////////////////////////////
 //--    local declarations          ///{{{1///////////////////////////////////
 
@@ -64,6 +71,53 @@ int main( int aArgc, char* aArgv[] )
 	printf( "Resolving `%s' from `%s':\n", remoteHostName, localHostName );
 
 	// TODO : add your code here
+
+	/*struct addrinfo {
+               int              ai_flags;
+               int              ai_family;
+               int              ai_socktype;
+               int              ai_protocol;
+               size_t           ai_addrlen;
+               struct sockaddr *ai_addr;
+               char            *ai_canonname;
+               struct addrinfo *ai_next;
+           };
+	*/
+
+	int returnval;
+	struct addrinfo hints, *res;
+
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	//const struct addrinfo hints = { 0, AF_INET, SOCK_STEAM, IPPROTO_TCP, 0, 0 ,0 };
+
+	//const struct addrinfo *hints = &hints;
+
+	if( ( returnval = getaddrinfo( remoteHostName, NULL, &hints, &res )) != 0 )
+	{
+		gai_strerror(returnval);
+		perror( "getaddrinfo(): " );
+		return 1;
+	};
+
+	sockaddr* sockAddr = res->ai_addr;
+
+	
+	//Why sa_family and not sin_family??	
+	assert( AF_INET == sockAddr->sa_family );
+
+	sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
+
+	//Fel värde, får knasig IP-adress, här är vi.
+	uint32_t ipNumber = inAddr -> sin_addr.s_addr;
+	
+	//Fattar inte inet_ntop alls
+	char* ipString;
+	inet_ntop(AF_INET, ipNumber, ipString, res->ai_addrlen);
+
+	printf( "%s has address %s\n", remoteHostName, ipString );
 
 	// Ok, we're done. Return success.
 	return 0;
