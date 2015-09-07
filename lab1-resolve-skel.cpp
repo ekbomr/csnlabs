@@ -85,11 +85,11 @@ int main( int aArgc, char* aArgv[] )
 	*/
 
 	int returnval;
-	char ipString[INET_ADDRSTRLEN];	
+	char ipString[INET_ADDRSTRLEN], ipv6String[INET6_ADDRSTRLEN];	
 	struct addrinfo hints, *res, *nxtP;
 
 	hints.ai_flags = 0;
-	hints.ai_family = AF_INET;
+	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
@@ -102,16 +102,21 @@ int main( int aArgc, char* aArgv[] )
 	
 	for(nxtP = res; nxtP != NULL; nxtP = nxtP->ai_next)
 	{
-		sockaddr* sockAddr = nxtP->ai_addr;
-	
-		//Why sa_family and not sin_family??	
-		assert( AF_INET == sockAddr->sa_family );
+		sockaddr* sockAddr = nxtP->ai_addr;				
 
-		sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
+		if(sockAddr->sa_family == AF_INET){
+			sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
+			inet_ntop(AF_INET, &(inAddr->sin_addr), ipString, INET_ADDRSTRLEN);
+			printf( "%s has address %s\n", remoteHostName, ipString );
+		}
+		else if(sockAddr->sa_family == AF_INET6)
+		{
+			sockaddr_in6* inAddr = (sockaddr_in6*) sockAddr;
+			inet_ntop(AF_INET6, &(inAddr->sin6_addr), ipv6String, INET6_ADDRSTRLEN);
+			printf( "%s has IPv6 address %s\n", remoteHostName, ipv6String );
+		}
+		
 
-		inet_ntop(AF_INET, &(inAddr->sin_addr), ipString, INET_ADDRSTRLEN);
-
-		printf( "%s has address %s\n", remoteHostName, ipString );
 	}
 
 	// Ok, we're done. Return success.
