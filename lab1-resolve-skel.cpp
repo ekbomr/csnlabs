@@ -2,7 +2,7 @@
 /** Translate host name into IPv4
  *
  * Resolve IPv4 address for a given host name. The host name is specified as
- * the first command line argument to the program. 
+ * the first command line argument to the program.
  *
  * Build program:
  *  $ gcc -Wall -g -o resolve <file>.cpp
@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <string.h>
 
 
 //--//////////////////////////////////////////////////////////////////////////
@@ -31,7 +32,7 @@ void print_usage( const char* aProgramName );
 //--    local config                ///{{{1///////////////////////////////////
 
 /* HOST_NAME_MAX may be missing, e.g. if you're running this on an MacOS X
- * machine. In that case, use MAXHOSTNAMELEN from <sys/param.h>. Otherwise 
+ * machine. In that case, use MAXHOSTNAMELEN from <sys/param.h>. Otherwise
  * generate an compiler error.
  */
 #if !defined(HOST_NAME_MAX)
@@ -56,7 +57,7 @@ int main( int aArgc, char* aArgv[] )
 	// The (only) argument is the remote host that we should resolve.
 	const char* remoteHostName = aArgv[1];
 
-	// Get the local host's name (i.e. the machine that the program is 
+	// Get the local host's name (i.e. the machine that the program is
 	// currently running on).
 	const size_t kHostNameMaxLength = HOST_NAME_MAX+1;
 	char localHostName[kHostNameMaxLength];
@@ -85,10 +86,13 @@ int main( int aArgc, char* aArgv[] )
 	*/
 
 	int returnval;
-	char ipString[INET_ADDRSTRLEN], ipv6String[INET6_ADDRSTRLEN];	
+	char ipString[INET_ADDRSTRLEN], ipv6String[INET6_ADDRSTRLEN];
 	struct addrinfo hints, *res, *nxtP;
 
-	hints.ai_flags = 0;
+	// Zero the hints struct
+	memset(&hints, 0, sizeof(hints));
+
+	//hints.ai_flags = 0;
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
@@ -99,10 +103,10 @@ int main( int aArgc, char* aArgv[] )
 		return 1;
 	};
 
-	
+
 	for(nxtP = res; nxtP != NULL; nxtP = nxtP->ai_next)
 	{
-		sockaddr* sockAddr = nxtP->ai_addr;				
+		sockaddr* sockAddr = nxtP->ai_addr;
 
 		if(sockAddr->sa_family == AF_INET){
 			sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
@@ -115,10 +119,12 @@ int main( int aArgc, char* aArgv[] )
 			inet_ntop(AF_INET6, &(inAddr->sin6_addr), ipv6String, INET6_ADDRSTRLEN);
 			printf( "%s has IPv6 address %s\n", remoteHostName, ipv6String );
 		}
-		
+
 
 	}
 
+	// Free mem allocated by getaddrinfo
+	freeaddrinfo(res);
 	// Ok, we're done. Return success.
 	return 0;
 }
@@ -130,4 +136,4 @@ void print_usage( const char* aProgramName )
 	fprintf( stderr, "Usage: %s <hostname>\n", aProgramName );
 }
 
-//--///}}}1/////////////// vim:syntax=cpp:foldmethod=marker:ts=4:noexpandtab: 
+//--///}}}1/////////////// vim:syntax=cpp:foldmethod=marker:ts=4:noexpandtab:
