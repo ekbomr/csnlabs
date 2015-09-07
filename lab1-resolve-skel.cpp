@@ -85,39 +85,34 @@ int main( int aArgc, char* aArgv[] )
 	*/
 
 	int returnval;
-	struct addrinfo hints, *res;
+	char ipString[INET_ADDRSTRLEN];	
+	struct addrinfo hints, *res, *nxtP;
 
+	hints.ai_flags = 0;
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
-	//const struct addrinfo hints = { 0, AF_INET, SOCK_STEAM, IPPROTO_TCP, 0, 0 ,0 };
-
-	//const struct addrinfo *hints = &hints;
-
 	if( ( returnval = getaddrinfo( remoteHostName, NULL, &hints, &res )) != 0 )
 	{
-		gai_strerror(returnval);
-		perror( "getaddrinfo(): " );
+		printf("%s\n", gai_strerror(returnval));
 		return 1;
 	};
 
-	sockaddr* sockAddr = res->ai_addr;
-
 	
-	//Why sa_family and not sin_family??	
-	assert( AF_INET == sockAddr->sa_family );
-
-	sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
-
-	//Fel värde, får knasig IP-adress, här är vi.
-	uint32_t ipNumber = inAddr -> sin_addr.s_addr;
+	for(nxtP = res; nxtP != NULL; nxtP = nxtP->ai_next)
+	{
+		sockaddr* sockAddr = nxtP->ai_addr;
 	
-	//Fattar inte inet_ntop alls
-	char* ipString;
-	inet_ntop(AF_INET, ipNumber, ipString, res->ai_addrlen);
+		//Why sa_family and not sin_family??	
+		assert( AF_INET == sockAddr->sa_family );
 
-	printf( "%s has address %s\n", remoteHostName, ipString );
+		sockaddr_in* inAddr = (sockaddr_in*) sockAddr;
+
+		inet_ntop(AF_INET, &(inAddr->sin_addr), ipString, INET_ADDRSTRLEN);
+
+		printf( "%s has address %s\n", remoteHostName, ipString );
+	}
 
 	// Ok, we're done. Return success.
 	return 0;
