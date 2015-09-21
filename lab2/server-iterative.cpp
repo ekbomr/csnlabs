@@ -164,67 +164,105 @@ int main( int argc, char* argv[] )
 	fd_set readset, writeset;
 
 	FD_ZERO(&readset);
+	FD_ZERO(&writeset);
 	FD_SET(listenfd, &readset);
 
+	int maxfd = listenfd;
 	std::vector<ConnectionData> connections;
 
 	// loop forever
 	while( 1 )
 	{
+
 		sockaddr_in clientAddr;
 		socklen_t addrSize = sizeof(clientAddr);
 
-		if (select(FD_SETSIZE , &readset, &writeset, NULL, NULL) < 0) {
+		if (select(maxfd + 1 , &readset, &writeset, NULL, NULL) < 0) {
 			perror("select() error");
 			return 1;
 		}
 		int clientfd;
 
-		// TODO http://www.gnu.org/software/libc/manual/html_node/Server-Example.html
-		// accept a single incoming connection
-		if (FD_ISSET(listenfd, &readset)) {
-			clientfd = accept( listenfd, (sockaddr*)&clientAddr, &addrSize );
+		for (int fd = 0; fd < maxfd; fd++) {
 
-			if( -1 == clientfd )
-			{
-				perror( "accept() failed" );
-				continue; // attempt to accept a different client.
+			// accept a single incoming connection
+			if (FD_ISSET(listenfd, &readset)) {
+				clientfd = accept( listenfd, (sockaddr*)&clientAddr, &addrSize );
+
+				if( -1 == clientfd )
+				{
+					perror( "accept() failed" );
+					continue; // attempt to accept a different client.
+				}
+
+				#			if NONBLOCKING
+						// enable non-blocking sends and receives on this socket
+						if( !set_socket_nonblocking( clientfd ) )
+							continue;
+				#			endif
+
+				if (maxfd < clientfd) maxfd = clientfd;
+
+				// initialize connection data
+				ConnectionData connData;
+				memset( &connData, 0, sizeof(connData) );
+
+				connData.sock = clientfd;
+				connData.state = eConnStateReceiving;
+
+				connections.push_back(connData);
+
+				FD_SET(clientfd, &readset);
+
+				printf("new client connected\n");
+			}
+			else if (FD_ISSET(fd, &readset)) {
+				ConnectionData connData;
+				for (int i = 0; i < connections.size(); i++) {
+					if (connections[i].sock == fd) {
+						connData = connections[i];
+						break;
+					}
+				}
+				/* read data from FD */
+				if (!process_client_recv(connData)) {
+					close(fd);
+				}
+				else {
+					FD_SET(fd, &writeset);
+				}
+
+			}
+			else if (FD_ISSET(fd, &writeset)) {
+				ConnectionData connData;
+				for (int i = 0; i < connections.size(); i++) {
+					if (connections[i].sock == fd) {
+						connData = connections[i];
+						break;
+					}
+				}
+				/* write data to FD */
+				if (!process_client_send(connData)) {
+					close(fd);
+				}
+				else{
+					FD_SET(fd, &readset);
+				}
 			}
 
-			printf("new client connected\n");
-		}
+	#			if VERBOSE
+			// print some information about the new client
+			char buff[128];
+			printf( "Connection from %s:%d -> socket %d\n",
+				inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
+				ntohs(clientAddr.sin_port),
+				clientfd
+			);
+			fflush( stdout );
+	#			endif
 
-#			if VERBOSE
-		// print some information about the new client
-		char buff[128];
-		printf( "Connection from %s:%d -> socket %d\n",
-			inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
-			ntohs(clientAddr.sin_port),
-			clientfd
-		);
-		fflush( stdout );
-#			endif
 
-#			if NONBLOCKING
-		// enable non-blocking sends and receives on this socket
-		if( !set_socket_nonblocking( clientfd ) )
-			continue;
-#			endif
 
-		// initialize connection data
-		ConnectionData connData;
-		memset( &connData, 0, sizeof(connData) );
-
-		connData.sock = clientfd;
-		connData.state = eConnStateReceiving;
-
-		connections.push_back(connData);
-
-		for( size_t i = 0; i < connections.size(); ++i )
-		{
-		 	printf( "Connection %zu: in state %d and has socket %d\n",
-			i, connections[i].state, connections[i].sock );
- 		}
 		// Repeatedly receive and re-send data from the connection. When
 		// the connection closes, process_client_*() will return false, no
 		// further processing is done.
@@ -237,9 +275,11 @@ int main( int argc, char* argv[] )
 		// 	while( processFurther && connData.state == eConnStateSending )
 		// 		processFurther = process_client_send( connData );
 		// }
+		}
+
 
 		// done - close connection
-		close( connData.sock );
+		//close( connData.sock );
 	}
 
 	// The program will never reach this part, but for demonstration purposes,
