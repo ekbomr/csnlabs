@@ -1,4 +1,4 @@
-CFLAGS=-Wall -g
+CFLAGS=-Wall -Wextra -g3
 
 clean:
 	rm *.o
@@ -15,4 +15,4 @@ client-simple.o: client-simple.cpp
 		g++ client-simple.cpp -o client-simple.o
 
 server-iterative.o: server-iterative.cpp
-		g++ server-iterative.cpp -o server-iterative.o
+		g++ server-iterative.cpp -o server-iterative
