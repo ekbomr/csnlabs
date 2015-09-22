@@ -158,21 +158,30 @@ int main( int argc, char* argv[] )
 	// set up listening socket - see setup_server_socket() for details.
 	int listenfd = setup_server_socket( serverPort );
 
-	if( -1 == listenfd )
-		return 1;
+	if( -1 == listenfd ) return 1;
 
 	fd_set readset, writeset;
-
-	FD_ZERO(&readset);
-	FD_ZERO(&writeset);
-	FD_SET(listenfd, &readset);
 
 	int maxfd = listenfd;
 	std::vector<ConnectionData> connections;
 
 	// loop forever
-	while( 1 )
-	{
+	while( 1 ) {
+		FD_ZERO(&writeset);
+		FD_ZERO(&readset);
+		FD_SET(listenfd, &readset);
+
+		connections.erase(remove_if(connections.begin(), connections.end(), &is_invalid_connection)
+			, connections.end());
+
+		for (int i = 0; i < connections.size(); i++) {
+			if (connections[i].state == eConnStateReceiving) {
+				FD_SET(connections[i].sock, &readset);
+			}
+			else if (connections[i].state == eConnStateSending) {
+				FD_SET(connections[i].sock, &writeset);
+			}
+		}
 
 		sockaddr_in clientAddr;
 		socklen_t addrSize = sizeof(clientAddr);
@@ -185,99 +194,68 @@ int main( int argc, char* argv[] )
 
 		for (int fd = 0; fd <= maxfd; fd++) {
 
-			// accept a single incoming connection
-			if (FD_ISSET(listenfd, &readset)) {
-				clientfd = accept( listenfd, (sockaddr*)&clientAddr, &addrSize );
+			if (FD_ISSET(fd, &readset)) {
+				// accept a single incoming connection
+				if (fd == listenfd) {
 
-				if( -1 == clientfd )
-				{
-					perror( "accept() failed" );
-					continue; // attempt to accept a different client.
-				}
-
-				#			if VERBOSE
-						// print some information about the new client
-						char buff[128];
-						printf( "Connection from %s:%d -> socket %d\n",
-							inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
-							ntohs(clientAddr.sin_port),
-							clientfd
-						);
-						fflush( stdout );
-				#			endif
-
-				#			if NONBLOCKING
-						// enable non-blocking sends and receives on this socket
-						if( !set_socket_nonblocking( clientfd ) )
-							continue;
-				#			endif
-
-				if (maxfd < clientfd) maxfd = clientfd;
-
-				// initialize connection data
-				ConnectionData connData;
-				memset( &connData, 0, sizeof(connData) );
-
-				connData.sock = clientfd;
-				connData.state = eConnStateReceiving;
-
-				connections.push_back(connData);
-
-				FD_SET(clientfd, &readset);
-
-				printf("new client connected\n");
-			}
-			else if (FD_ISSET(fd, &readset)) {
-				ConnectionData connData;
-				for (int i = 0; i < connections.size(); i++) {
-					if (connections[i].sock == fd) {
-						connData = connections[i];
-						break;
+					clientfd = accept( listenfd, (sockaddr*)&clientAddr, &addrSize );
+					if( -1 == clientfd )
+					{
+						perror( "accept() failed" );
+						continue; // attempt to accept a different client.
 					}
-				}
-				/* read data from FD */
-				if (!process_client_recv(connData)) {
-					close(fd);
+					#			if VERBOSE
+							// print some information about the new client
+							char buff[128];
+							printf( "Connection from %s:%d -> socket %d\n",
+								inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
+								ntohs(clientAddr.sin_port),
+								clientfd
+							);
+							fflush( stdout );
+					#			endif
+					#			if NONBLOCKING
+							// enable non-blocking sends and receives on this socket
+							if( !set_socket_nonblocking( clientfd ) )
+								continue;
+					#			endif
+
+					if (maxfd < clientfd) maxfd = clientfd;
+					// initialize connection data
+					ConnectionData connData;
+					memset( &connData, 0, sizeof(connData) );
+					connData.sock = clientfd;
+					connData.state = eConnStateReceiving;
+
+					connections.push_back(connData);
+
+					printf("new client connected\n");
 				}
 				else {
-					FD_SET(fd, &writeset);
+					for (int i = 0; i < connections.size(); i++) {
+						if (connections[i].sock == fd) {
+							if (!process_client_recv(connections[i])) {
+								close(connections[i].sock);
+								connections[i].sock = -1;
+							}
+							break;
+						}
+					}
 				}
-
 			}
+
 			else if (FD_ISSET(fd, &writeset)) {
-				ConnectionData connData;
 				for (int i = 0; i < connections.size(); i++) {
 					if (connections[i].sock == fd) {
-						connData = connections[i];
+						if (!process_client_send(connections[i])) {
+							close(connections[i].sock);
+							connections[i].sock = -1;
+						}
 						break;
 					}
 				}
-				/* write data to FD */
-				if (!process_client_send(connData)) {
-					close(fd);
-				}
-				else{
-					FD_SET(fd, &readset);
-				}
 			}
-
-		// Repeatedly receive and re-send data from the connection. When
-		// the connection closes, process_client_*() will return false, no
-		// further processing is done.
-		// bool processFurther = true;
-		// while( processFurther )
-		// {
-		// 	while( processFurther && connData.state == eConnStateReceiving )
-		// 		processFurther = process_client_recv( connData );
-		//
-		// 	while( processFurther && connData.state == eConnStateSending )
-		// 		processFurther = process_client_send( connData );
-		// }
 		}
-
-
-		// done - close connection
-		//close( connData.sock );
 	}
 
 	// The program will never reach this part, but for demonstration purposes,
@@ -291,7 +269,6 @@ int main( int argc, char* argv[] )
 static bool process_client_recv( ConnectionData& cd )
 {
 	assert( cd.state == eConnStateReceiving );
-
 	// receive from socket
 	ssize_t ret = recv( cd.sock, cd.buffer, kTransferBufferSize, 0 );
 
