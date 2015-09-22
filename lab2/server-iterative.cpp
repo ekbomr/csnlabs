@@ -183,7 +183,7 @@ int main( int argc, char* argv[] )
 		}
 		int clientfd;
 
-		for (int fd = 0; fd < maxfd; fd++) {
+		for (int fd = 0; fd <= maxfd; fd++) {
 
 			// accept a single incoming connection
 			if (FD_ISSET(listenfd, &readset)) {
@@ -194,6 +194,17 @@ int main( int argc, char* argv[] )
 					perror( "accept() failed" );
 					continue; // attempt to accept a different client.
 				}
+
+				#			if VERBOSE
+						// print some information about the new client
+						char buff[128];
+						printf( "Connection from %s:%d -> socket %d\n",
+							inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
+							ntohs(clientAddr.sin_port),
+							clientfd
+						);
+						fflush( stdout );
+				#			endif
 
 				#			if NONBLOCKING
 						// enable non-blocking sends and receives on this socket
@@ -249,19 +260,6 @@ int main( int argc, char* argv[] )
 					FD_SET(fd, &readset);
 				}
 			}
-
-	#			if VERBOSE
-			// print some information about the new client
-			char buff[128];
-			printf( "Connection from %s:%d -> socket %d\n",
-				inet_ntop( AF_INET, &clientAddr.sin_addr, buff, sizeof(buff) ),
-				ntohs(clientAddr.sin_port),
-				clientfd
-			);
-			fflush( stdout );
-	#			endif
-
-
 
 		// Repeatedly receive and re-send data from the connection. When
 		// the connection closes, process_client_*() will return false, no
