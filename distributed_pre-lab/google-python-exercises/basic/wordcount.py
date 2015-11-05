@@ -45,7 +45,30 @@ import sys
 # and builds and returns a word/count dict for it.
 # Then print_words() and print_top() can just call the utility function.
 
-###
+def read_file(filename):
+    words_dict = {}
+    f = open(filename, 'rU')
+    for line in f:
+        for char in line.split():
+            if char.lower() in words_dict:
+                words_dict[char.lower()] += 1
+            else:
+                words_dict[char.lower()] = 1
+
+    return words_dict
+
+
+def print_words(filename):
+    sorted_dict = sorted(read_file(filename).items())
+    for kvp in sorted_dict:
+        print kvp[0] + ' ' + str(kvp[1])
+
+
+def print_top(filename):
+    sorted_dict = sorted(read_file(filename).items(), key=lambda a: a[-1], reverse=True)
+    for i in range (20):
+        print sorted_dict[i][0] + ' ' + str(sorted_dict[i][1])
+
 
 # This basic command line argument parsing code is provided and
 # calls the print_words() and print_top() functions which you must define.
