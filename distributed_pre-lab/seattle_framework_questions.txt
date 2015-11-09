@@ -1,0 +1,19 @@
+Answers to Seattle framework questions:
+
+1. A free, community-driven platform for distributed systems research.
+
+2. A vessel is a VM on a Seattle node, that you can use for computing tasks.
+
+3. Repy (Restricted Python). It is a subset of python, where some parts of the language have been removed for security.
+
+4. python repy.py restrictions.test example.repy
+
+5.      1. Acquire vessel(s) through the Seattle Clearinghouse.
+        2. Run Seash.
+        3. Log in with your RSA key.
+        4. Locate your vessel with the command "browse".
+        5. Access the resource(s) with the command "on ***".
+        6. Run the program with "run example.repy".
+
+6. waitforconn() returns a so-called commhandle, which is a reference to a connection.
+   Through this handle, you can do operations related to the connection, for example closing it.
