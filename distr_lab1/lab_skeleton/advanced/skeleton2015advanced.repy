@@ -9,11 +9,10 @@ def start_board():
   port = mycontext['port']
   print "Listening on IP " + str(ip) +" port " + str(port)
   try:
-      listencommhandle = waitforconn(ip,port,board)
+    listencommhandle = waitforconn(ip,port,board)
   except Exception as e:
-      print "Exception in start_board: %s, %s\n" %(type(e), e)
-      raise
-      #pass
+    print "Exception in start_board: %s, %s\n" %(type(e), e)
+    raise
 
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
