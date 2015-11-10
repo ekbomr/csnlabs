@@ -26,24 +26,30 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       stopcomm(thiscommhandle)
 
     elif msgheader.startswith( 'POST' ):
-    	print "got POST:\n", msgheader
+        print "got POST:\n", msgheader
         vesselIPs = mycontext['iplist']
-        socketobject = openconn('127.0.0.1', 63101)
 
         msg = msgheader[msgheader.find('comment') + 8: ]
-        socketobject.send(msg)
         mycontext['messages'].append(msg)
 
+        if len(callargs) == 2:
+          socketobject = openconn('127.0.0.1', 63101)
+          socketobject.send(msg)
+
+        else:
+            for ipaddr in vesselIPs:
+                socketobject = openconn(ipaddr, mycontext['port'])
+                socketobject.send(msgheader)
+
+
         refresh_page(sockobj)
-        '''for ipaddr in vesselIPs:
-            socketobject = openconn(ipaddr, mycontext['port'])
-            socketobject.send(msgheader)
-            stopcomm(socketobject)'''
+
     else:
     	print "got something:\n", msgheader
         mycontext['messages'].append(msgheader)
 
         stopcomm(thiscommhandle)
+
   except Exception as e:
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
@@ -100,6 +106,13 @@ if callfunc == 'initialize':
     port = int(callargs[0])
     ip = getmyip()
 
+    vesselIPs = []
+    ipList = file.open('iplist.txt', 'rU')
+    for ipaddr in ipList.next():
+        vesselIPs.append(ipaddr)
+
+    mycontext['iplist'] = vesselIPs
+
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
   # example:
@@ -120,13 +133,6 @@ if callfunc == 'initialize':
   mycontext['headerhtml'] = file("header.html").read()
   mycontext['footerhtml'] = file("footer.html").read()
 
-  vesselIPs = []
-  '''ipList = file.open('iplist.txt', 'rU')
-  for ipaddr in ipList.next():
-      vesselIPs.append(ipaddr)
-    '''
-
-  mycontext['iplist'] = vesselIPs
   mycontext['messages'] = []
 
   start_board()
