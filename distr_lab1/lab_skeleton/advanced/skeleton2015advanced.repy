@@ -22,25 +22,38 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     msgheader = sockobj.recv(1024) # Receive message,
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-      htmlresponse = generate_html_page()
-      sockobj.send("HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
-      "Content-length: %i\r\n\r\n%s" % (len(htmlresponse), htmlresponse))
+      refresh_page(sockobj)
       stopcomm(thiscommhandle)
+
     elif msgheader.startswith( 'POST' ):
     	print "got POST:\n", msgheader
         vesselIPs = mycontext['iplist']
         socketobject = openconn('127.0.0.1', 63101)
-        socketobject.send(msgheader)
+
+        msg = msgheader[msgheader.find('comment') + 8: ]
+        socketobject.send(msg)
+        mycontext['messages'].append(msg)
+
+        refresh_page(sockobj)
         '''for ipaddr in vesselIPs:
             socketobject = openconn(ipaddr, mycontext['port'])
             socketobject.send(msgheader)
             stopcomm(socketobject)'''
     else:
     	print "got something:\n", msgheader
+        mycontext['messages'].append(msgheader)
+
+        stopcomm(thiscommhandle)
   except Exception as e:
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
-    #pass
+
+
+def refresh_page(sockobj):
+
+    htmlresponse = generate_html_page()
+    sockobj.send("HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
+    "Content-length: %i\r\n\r\n%s" % (len(htmlresponse), htmlresponse))
 
 # ------------------------------------------------------------------------------
 # Outputs the blackboard html
@@ -50,7 +63,14 @@ def generate_html_page(status=""):
   #Initialize blackboard content
 
   # one sample entry
-  entry = "Empty..."
+  entry = ""
+  if mycontext['messages'] == []:
+      entry = "Empty..."
+
+  else:
+      for message in mycontext['messages']:
+          entry += message + '<br>'
+
   content ='<div class="entry">%s</div>' %( entry )
 
   # dynamic title showing Ip address, port and up time.
@@ -61,10 +81,10 @@ def generate_html_page(status=""):
   content = '<div id="boardcontents_placeholder">%s%s</div>' %(board_title, content)
 
   # An optional status message
-  status_message = "<div class='status'>%s</div>" % (status)
+  #status_message = "<div class='status'>%s</div>" % (status)
 
   #Concatenate strings into huge string representing the final html
-  content = "".join([mycontext['headerhtml'], status_message, content, mycontext['footerhtml']])
+  content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
 
   #print content
   return content
@@ -107,5 +127,6 @@ if callfunc == 'initialize':
     '''
 
   mycontext['iplist'] = vesselIPs
+  mycontext['messages'] = []
 
   start_board()
