@@ -5,58 +5,58 @@
 # Start listening and handle incoming connections in board() function
 # ------------------------------------------------------------------------------
 def start_board():
-  ip = mycontext['ip']
-  port = mycontext['port']
-  print "Listening on IP " + str(ip) +" port " + str(port)
-  try:
-    listencommhandle = waitforconn(ip,port,board)
-  except Exception as e:
-    print "Exception in start_board: %s, %s\n" %(type(e), e)
-    raise
+    ip = mycontext['ip']
+    port = mycontext['port']
+    print "Listening on IP " + str(ip) +" port " + str(port)
+    try:
+        listencommhandle = waitforconn(ip,port,board)
+    except Exception, e:
+        print ("Exception in start_board: %s, %s\n" %(type(e), e))
+        pass
 
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
 # ------------------------------------------------------------------------------
 def board(ip, port, sockobj, thiscommhandle, listencommhandle):
-  try:
-    msgheader = sockobj.recv(1024) # Receive message,
+    try:
+        msgheader = sockobj.recv(1024) # Receive message,
     # React depending on message type: HTTP GET or POST, or some other type of communication.
-    if msgheader.startswith( 'GET' ):
-      refresh_page(sockobj)
-      stopcomm(thiscommhandle)
+        if msgheader.startswith( 'GET' ):
+            refresh_page(sockobj)
+            stopcomm(thiscommhandle)
 
-    elif msgheader.startswith( 'POST' ):
-        print "got POST:\n", msgheader
-        vesselIPs = mycontext['iplist']
+        elif msgheader.startswith( 'POST' ):
+            print "got POST:\n", msgheader
 
-        msg = msgheader[msgheader.find('comment') + 8: ]
-        mycontext['messages'].append(msg)
+            msg = msgheader[msgheader.find('comment') + 8: ]
+            mycontext['messages'].append(msg)
 
-        if len(callargs) == 2:
-          socketobject = openconn('127.0.0.1', 63101)
-          socketobject.send(msg)
+            if len(callargs) == 2:
+                socketobject = openconn('127.0.0.1', 63101)
+                socketobject.send(msg)
+
+            else:
+                vesselIPs = mycontext['iplist']
+                for ipaddr in vesselIPs:
+                    if ipaddr == mycontext['ip']:
+                        continue
+
+                    socketobject = openconn(ipaddr, mycontext['port'])
+                    socketobject.send(msg)
+
+            refresh_page(sockobj)
 
         else:
-            for ipaddr in vesselIPs:
-                socketobject = openconn(ipaddr, mycontext['port'])
-                socketobject.send(msgheader)
+            print "got something:\n", msgheader
+            mycontext['messages'].append(msgheader)
+            stopcomm(thiscommhandle)
 
-
-        refresh_page(sockobj)
-
-    else:
-    	print "got something:\n", msgheader
-        mycontext['messages'].append(msgheader)
-
-        stopcomm(thiscommhandle)
-
-  except Exception as e:
-    print "Exception in board: %s, %s\n" %(type(e), e)
-    raise
+    except Exception, e:
+        print "Exception in board: %s, %s\n" %(type(e), e)
+        raise
 
 
 def refresh_page(sockobj):
-
     htmlresponse = generate_html_page()
     sockobj.send("HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
     "Content-length: %i\r\n\r\n%s" % (len(htmlresponse), htmlresponse))
@@ -67,33 +67,32 @@ def refresh_page(sockobj):
 # ------------------------------------------------------------------------------
 def generate_html_page(status=""):
   #Initialize blackboard content
-
   # one sample entry
-  entry = ""
-  if mycontext['messages'] == []:
-      entry = "Empty..."
+    entry = ""
+    if mycontext['messages'] == []:
+        entry = "Empty..."
 
-  else:
-      for message in mycontext['messages']:
-          entry += message + '<br>'
+    else:
+        for message in mycontext['messages']:
+            entry += message + '<br>'
 
-  content ='<div class="entry">%s</div>' %( entry )
+    content ='<div class="entry">%s</div>' %( entry )
 
   # dynamic title showing Ip address, port and up time.
-  board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['ip'], mycontext['port'], int(getruntime()))
+    board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['ip'], mycontext['port'], int(getruntime()))
 
   # merging the contents of the board with the title
   # and wrapping all with <div id="boardcontents_placeholder”>...</div>
-  content = '<div id="boardcontents_placeholder">%s%s</div>' %(board_title, content)
+    content = '<div id="boardcontents_placeholder">%s%s</div>' %(board_title, content)
 
   # An optional status message
   #status_message = "<div class='status'>%s</div>" % (status)
 
   #Concatenate strings into huge string representing the final html
-  content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
+    content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
 
   #print content
-  return content
+    return content
 
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
@@ -102,37 +101,38 @@ def generate_html_page(status=""):
 if callfunc == 'initialize':
   # Running remotely (assuming that we pass one input argument only when we run remotely):
   # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
-  if len(callargs) == 1:
-    port = int(callargs[0])
-    ip = getmyip()
+    if len(callargs) == 1:
+        port = int(callargs[0])
+        ip = getmyip()
 
-    vesselIPs = []
-    ipList = file.open('iplist.txt', 'rU')
-    for ipaddr in ipList.next():
-        vesselIPs.append(ipaddr)
+        vesselIPs = []
+        ipList = open('iplist.txt', 'r')
+        for ipaddr in ipList:
+            vesselIPs.append(ipaddr)
 
-    mycontext['iplist'] = vesselIPs
+        mycontext['iplist'] = vesselIPs
+        ipList.close()
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
   # example:
   # python ../demokit/repy.py ../demokit/restrictions.default skeleton2015advanced.repy 127.0.0.1 63100
-  elif len(callargs) == 2:
-    port = int(callargs[1])
-    ip = callargs[0]
+    elif len(callargs) == 2:
+        port = int(callargs[1])
+        ip = callargs[0]
 
   # Fail if we don't have 1 or 2 arguments
-  else:
-    raise Exception("Specify a port only for auto detection of IP, or specify IP and port")
+    else:
+        raise Exception("Specify a port only for auto detection of IP, or specify IP and port")
 
   #Initialize Port and IP
-  mycontext['port'] = port
-  mycontext['ip'] = ip
+    mycontext['port'] = port
+    mycontext['ip'] = ip
 
-  #read header and footer html files
-  mycontext['headerhtml'] = file("header.html").read()
-  mycontext['footerhtml'] = file("footer.html").read()
+      #read header and footer html files
+    mycontext['headerhtml'] = file("header.html").read()
+    mycontext['footerhtml'] = file("footer.html").read()
 
-  mycontext['messages'] = []
+    mycontext['messages'] = []
 
-  start_board()
+    start_board()
