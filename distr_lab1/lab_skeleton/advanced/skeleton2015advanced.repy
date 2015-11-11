@@ -38,13 +38,15 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
             else:
                 vesselIPs = mycontext['iplist']
                 for ipaddr in vesselIPs:
-                    if ipaddr == mycontext['ip']:
+                    if ipaddr.rstrip() == mycontext['ip']:
                         continue
 
-                    socketobject = openconn(ipaddr, mycontext['port'])
-                    socketobject.send(msg)
+                    else:
+                        socketobject = openconn(ipaddr, mycontext['port'])
+                        socketobject.send(msg)
 
             refresh_page(sockobj)
+            stopcomm(thiscommhandle)
 
         else:
             print "got something:\n", msgheader
