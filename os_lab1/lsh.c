@@ -1,8 +1,8 @@
-/* 
+/*
  * Main source code file for lsh shell program
  *
  * You are free to add functions to this file.
- * If you want to add functions in a separate file 
+ * If you want to add functions in a separate file
  * you will need to modify Makefile to compile
  * your additional functions.
  *
@@ -10,18 +10,20 @@
  * easier for us while grading your assignment.
  *
  * Submit the entire lab1 folder as a tar archive (.tgz).
- * Command to create submission archive: 
+ * Command to create submission archive:
       $> tar cvf lab1.tgz lab1/
  *
- * All the best 
+ * All the best
  */
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <readline/readline.h>
-#include <readline/history.h>
-#include "parse.h"
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <readline/readline.h>
+ #include <readline/history.h>
+ #include "parse.h"
+ #include <unistd.h>
+ #include <sys/wait.h>
+ #include <string.h>
 
 /*
  * Function declarations
@@ -61,15 +63,26 @@ int main(void)
        * and execute it.
        */
       stripwhite(line);
-
       if(*line) {
         add_history(line);
         /* execute it */
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
+
+        char *usrcmd = cmd.pgm->pgmlist[0];
+        if (strcmp(str, "exit") == 0) {
+          return 0;
+        }
+        else if (strcmp(str, "cd") == 0) {
+          chdir("~");
+        }
+
+        char *availCmds = fetchPOSIX();
+
+
       }
     }
-    
+
     if(line) {
       free(line);
     }
@@ -78,18 +91,31 @@ int main(void)
 }
 
 /*
+ * Fetch POSIX path and return a pointer to the string
+ */
+char * fetchPOSIX(){
+  char *pathbuf;
+  size_t n;
+
+  n = confstr(_CS_PATH, NULL, (size_t) 0);
+  pathbuf = malloc(n);
+  if (pathbuf == NULL) abort();
+
+  confstr(_CS_PATH, pathbuf, n);
+  return pathbuf;
+}
+/*
  * Name: PrintCommand
  *
  * Description: Prints a Command structure as returned by parse on stdout.
  *
  */
-void
-PrintCommand (int n, Command *cmd)
+void PrintCommand (int n, Command *cmd)
 {
   printf("Parse returned %d:\n", n);
   printf("   stdin : %s\n", cmd->rstdin  ? cmd->rstdin  : "<none>" );
   printf("   stdout: %s\n", cmd->rstdout ? cmd->rstdout : "<none>" );
-  printf("   bg    : %s\n", cmd->bakground ? "yes" : "no");
+  printf("   bg    : %s\n", cmd->background ? "yes" : "no");
   PrintPgm(cmd->pgm);
 }
 
@@ -99,8 +125,7 @@ PrintCommand (int n, Command *cmd)
  * Description: Prints a list of Pgm:s
  *
  */
-void
-PrintPgm (Pgm *p)
+void PrintPgm (Pgm *p)
 {
   if (p == NULL) {
     return;
@@ -125,15 +150,14 @@ PrintPgm (Pgm *p)
  *
  * Description: Strip whitespace from the start and end of STRING.
  */
-void
-stripwhite (char *string)
+void stripwhite (char *string)
 {
   register int i = 0;
 
   while (whitespace( string[i] )) {
     i++;
   }
-  
+
   if (i) {
     strcpy (string, string + i);
   }
@@ -143,5 +167,5 @@ stripwhite (char *string)
     i--;
   }
 
-  string [++i] = '\0';
+  string[++i] = '\0';
 }
