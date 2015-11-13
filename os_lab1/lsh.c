@@ -94,7 +94,6 @@ int main(void)
 
           printf("Parent: %d\n", getpid());
           pid = fork();
-          printf("Child: %d\n", pid);
 
           /* Child process */
           if (pid == 0) {
@@ -104,6 +103,7 @@ int main(void)
           /* Parent process */
           else {
             if (!cmd.background) {
+              printf("Waiting for child...\n");
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait status: %i\n", status);
               }
