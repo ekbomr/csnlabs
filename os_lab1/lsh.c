@@ -32,6 +32,7 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+char * fetchPOSIX();
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -70,15 +71,17 @@ int main(void)
         PrintCommand(n, &cmd);
 
         char *usrcmd = cmd.pgm->pgmlist[0];
-        if (strcmp(str, "exit") == 0) {
+        if (strcmp(usrcmd, "exit") == 0) {
           return 0;
         }
-        else if (strcmp(str, "cd") == 0) {
+        else if (strcmp(usrcmd, "cd") == 0) {
           chdir("~");
         }
 
         char *availCmds = fetchPOSIX();
-
+        printf(availCmds); // /bin:/usr/bin
+        //separatePaths(availCmds, );
+        printf("\n");
 
       }
     }
