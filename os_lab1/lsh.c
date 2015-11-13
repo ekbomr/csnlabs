@@ -36,7 +36,6 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-char * fetchPOSIX();
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -77,13 +76,35 @@ int main(void)
           return 0;
         }
         else if (strcmp(usrcmd, "cd") == 0) {
-          chdir("~");
+          if (cmd.pgm->pgmlist[1]) {
+            chdir(cmd.pgm->pgmlist[1]);
+          }
+          else {
+            chdir(getenv("HOME"));
+          }
+          char *dirPath;
+          dirPath = getcwd(dirPath, 100);
+          printf("%s\n", dirPath);
         }
 
-        char *availCmds = fetchPOSIX();
-        printf(availCmds); // /bin:/usr/bin
-        //separatePaths(availCmds, );
-        printf("\n");
+        pid_t pid;
+        int status;
+
+        printf("%d, Im the parent\n", getpid());
+        pid = fork();
+
+        if (pid == 0) {
+          execvp(usrcmd, cmd.pgm->pgmlist);
+        }
+        else if (pid < 0) {
+          printf("Something wrong");
+          exit(1);
+        }
+        else {
+          if (waitpid(pid, &status, 0) != pid) {
+            status = -1;
+          }
+        }
 
       }
     }
@@ -95,20 +116,7 @@ int main(void)
   return 0;
 }
 
-/*
- * Fetch POSIX path and return a pointer to the string
- */
-char * fetchPOSIX(){
-  char *pathbuf;
-  size_t n;
 
-  n = confstr(_CS_PATH, NULL, (size_t) 0);
-  pathbuf = malloc(n);
-  if (pathbuf == NULL) abort();
-
-  confstr(_CS_PATH, pathbuf, n);
-  return pathbuf;
-}
 /*
  * Name: PrintCommand
  *
