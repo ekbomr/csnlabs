@@ -90,8 +90,9 @@ int main(void)
         pid_t pid;
         int status;
 
-        printf("%d, Im the parent\n", getpid());
+        printf("%d, I'm the parent\n", getpid());
         pid = fork();
+        printf("%d, I'm the child\n", pid);
 
         if (pid == 0) {
           execvp(usrcmd, cmd.pgm->pgmlist);
@@ -101,8 +102,14 @@ int main(void)
           exit(1);
         }
         else {
+          if (cmd.background) {
+            continue;
+          }
           if (waitpid(pid, &status, 0) != pid) {
-            status = -1;
+            printf("%i\n", status);
+          }
+          else {
+            printf("test\n");
           }
         }
 
