@@ -12,6 +12,7 @@
  * Submit the entire lab1 folder as a tar archive (.tgz).
  * Command to create submission archive:
       $> tar cvf lab1.tgz lab1/
+<<<<<<< HEAD
  *
  * All the best
  */
@@ -24,6 +25,9 @@
  #include <unistd.h>
  #include <sys/wait.h>
  #include <string.h>
+
+
+/* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
 /*
  * Function declarations
@@ -39,9 +43,7 @@ int done = 0;
 
 /*
  * Name: main
- *
  * Description: Gets the ball rolling...
- *
  */
 int main(void)
 {
