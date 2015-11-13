@@ -75,6 +75,7 @@ int main(void)
         if (strcmp(usrcmd, "exit") == 0) {
           return 0;
         }
+
         else if (strcmp(usrcmd, "cd") == 0) {
           if (cmd.pgm->pgmlist[1]) {
             chdir(cmd.pgm->pgmlist[1]);
@@ -87,32 +88,31 @@ int main(void)
           printf("%s\n", dirPath);
         }
 
-        pid_t pid;
-        int status;
-
-        printf("%d, I'm the parent\n", getpid());
-        pid = fork();
-        printf("%d, I'm the child\n", pid);
-
-        if (pid == 0) {
-          execvp(usrcmd, cmd.pgm->pgmlist);
-        }
-        else if (pid < 0) {
-          printf("Something wrong");
-          exit(1);
-        }
         else {
-          if (cmd.background) {
-            continue;
+          pid_t pid;
+          int status;
+
+          printf("%d, I'm the parent\n", getpid());
+          pid = fork();
+          printf("%d, I'm the child\n", pid);
+
+          if (pid == 0) {
+            execvp(usrcmd, cmd.pgm->pgmlist);
           }
-          if (waitpid(pid, &status, 0) != pid) {
-            printf("%i\n", status);
+          else if (pid < 0) {
+            printf("Something wrong");
+            exit(1);
           }
-          else {
-            printf("test\n");
+
+          if (!cmd.background) {
+            if (waitpid(pid, &status, 0) != pid) {
+              printf("Wait status: %i\n", status);
+            }
+            else {
+              printf("Process wait error\n");
+            }
           }
         }
-
       }
     }
 
