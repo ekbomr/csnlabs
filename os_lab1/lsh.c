@@ -25,7 +25,8 @@
  #include <unistd.h>
  #include <sys/wait.h>
  #include <string.h>
-
+ #include <signal.h>
+ #include <sys/types.h>
 
 /* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
@@ -36,9 +37,12 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void clean_up_child_process(int signal_number);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+
+sig_atomic_t child_exit_status;
 
 /*
  * Name: main
@@ -48,6 +52,11 @@ int main(void)
 {
   Command cmd;
   int n;
+  /* Handle the termination of a child process */
+  struct sigaction sigchld_action;
+  memset (&sigchld_action, 0, sizeof (sigchld_action));
+  sigchld_action.sa_handler = &clean_up_child_process;
+  sigaction (SIGCHLD, &sigchld_action, NULL);
 
   while (!done) {
 
@@ -92,7 +101,6 @@ int main(void)
 
         printf("%d, I'm the parent\n", getpid());
         pid = fork();
-        printf("%d, I'm the child\n", pid);
 
         if (pid == 0) {
           execvp(usrcmd, cmd.pgm->pgmlist);
@@ -123,6 +131,14 @@ int main(void)
   return 0;
 }
 
+void clean_up_child_process (int signal_number)
+{
+  /* Clean up the child process. */
+  int status;
+  wait(&status);
+  /* Store its exit status in a global variable. */
+  child_exit_status = status;
+}
 
 /*
  * Name: PrintCommand
