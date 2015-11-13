@@ -92,24 +92,25 @@ int main(void)
           pid_t pid;
           int status;
 
-          printf("%d, I'm the parent\n", getpid());
+          printf("Parent: %d\n", getpid());
           pid = fork();
-          printf("%d, I'm the child\n", pid);
+          printf("Child: %d\n", pid);
 
+          /* Child process */
           if (pid == 0) {
             execvp(usrcmd, cmd.pgm->pgmlist);
           }
-          else if (pid < 0) {
-            printf("Something wrong");
-            exit(1);
-          }
 
-          if (!cmd.background) {
-            if (waitpid(pid, &status, 0) != pid) {
-              printf("Wait status: %i\n", status);
-            }
-            else {
-              printf("Process wait error\n");
+          /* Parent process */
+          else {
+            if (!cmd.background) {
+              if (waitpid(pid, &status, 0) != pid) {
+                printf("Wait status: %i\n", status);
+              }
+              else {
+                printf("Process wait error!\n");
+              }
+
             }
           }
         }
