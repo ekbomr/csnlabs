@@ -51,6 +51,9 @@ int main(void)
 
   while (!done) {
 
+    /* Zombie clearing... */
+    wait(NULL);
+
     char *line;
     line = readline("> ");
 
@@ -98,6 +101,11 @@ int main(void)
           /* Child process */
           if (pid == 0) {
             execvp(usrcmd, cmd.pgm->pgmlist);
+          }
+
+          else if (pid == -1) {
+            printf("Fork error! Exiting...\n");
+            exit(0);
           }
 
           /* Parent process */
