@@ -1,8 +1,8 @@
-/* 
+/*
  * Main source code file for lsh shell program
  *
  * You are free to add functions to this file.
- * If you want to add functions in a separate file 
+ * If you want to add functions in a separate file
  * you will need to modify Makefile to compile
  * your additional functions.
  *
@@ -10,18 +10,17 @@
  * easier for us while grading your assignment.
  *
  * Submit the entire lab1 folder as a tar archive (.tgz).
- * Command to create submission archive: 
+ * Command to create submission archive:
       $> tar cvf lab1.tgz lab1/
- *
- * All the best 
  */
-
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "parse.h"
+
+/* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
 /*
  * Function declarations
@@ -36,9 +35,7 @@ int done = 0;
 
 /*
  * Name: main
- *
  * Description: Gets the ball rolling...
- *
  */
 int main(void)
 {
@@ -69,7 +66,7 @@ int main(void)
         PrintCommand(n, &cmd);
       }
     }
-    
+
     if(line) {
       free(line);
     }
@@ -133,7 +130,7 @@ stripwhite (char *string)
   while (whitespace( string[i] )) {
     i++;
   }
-  
+
   if (i) {
     strcpy (string, string + i);
   }
