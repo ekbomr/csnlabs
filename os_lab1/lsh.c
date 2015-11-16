@@ -12,7 +12,6 @@
  * Submit the entire lab1 folder as a tar archive (.tgz).
  * Command to create submission archive:
       $> tar cvf lab1.tgz lab1/
-<<<<<<< HEAD
  *
  * All the best
  */
@@ -25,7 +24,8 @@
  #include <unistd.h>
  #include <sys/wait.h>
  #include <string.h>
-
+ #include <signal.h>
+ #include <sys/types.h>
 
 /* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
@@ -36,9 +36,12 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void clean_up_child_process(int signal_number);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+
+sig_atomic_t child_exit_status;
 
 /*
  * Name: main
@@ -48,11 +51,13 @@ int main(void)
 {
   Command cmd;
   int n;
+  /* Handle the termination of a child process */
+  struct sigaction sigchld_action;
+  memset (&sigchld_action, 0, sizeof (sigchld_action));
+  sigchld_action.sa_handler = &clean_up_child_process;
+  sigaction (SIGCHLD, &sigchld_action, NULL);
 
   while (!done) {
-
-    /* Zombie clearing... */
-    wait(NULL);
 
     char *line;
     line = readline("> ");
@@ -78,7 +83,6 @@ int main(void)
         if (strcmp(usrcmd, "exit") == 0) {
           return 0;
         }
-
         else if (strcmp(usrcmd, "cd") == 0) {
           if (cmd.pgm->pgmlist[1]) {
             chdir(cmd.pgm->pgmlist[1]);
@@ -91,37 +95,31 @@ int main(void)
           printf("%s\n", dirPath);
         }
 
+        pid_t pid;
+        int status;
+
+        printf("%d, I'm the parent\n", getpid());
+        pid = fork();
+
+        if (pid == 0) {
+          execvp(usrcmd, cmd.pgm->pgmlist);
+        }
+        else if (pid < 0) {
+          printf("Something wrong");
+          exit(1);
+        }
         else {
-          pid_t pid;
-          int status;
-
-          printf("Parent: %d\n", getpid());
-          pid = fork();
-
-          /* Child process */
-          if (pid == 0) {
-            execvp(usrcmd, cmd.pgm->pgmlist);
+          if (cmd.background) {
+            continue;
           }
-
-          else if (pid == -1) {
-            printf("Fork error! Exiting...\n");
-            exit(0);
+          if (waitpid(pid, &status, 0) != pid) {
+            printf("%i\n", status);
           }
-
-          /* Parent process */
           else {
-            if (!cmd.background) {
-              printf("Waiting for child...\n");
-              if (waitpid(pid, &status, 0) != pid) {
-                printf("Wait status: %i\n", status);
-              }
-              else {
-                printf("Process wait error!\n");
-              }
-
-            }
+            printf("test\n");
           }
         }
+
       }
     }
 
@@ -132,6 +130,14 @@ int main(void)
   return 0;
 }
 
+void clean_up_child_process (int signal_number)
+{
+  /* Clean up the child process. */
+  int status;
+  wait(&status);
+  /* Store its exit status in a global variable. */
+  child_exit_status = status;
+}
 
 /*
  * Name: PrintCommand
