@@ -42,6 +42,7 @@ void clean_up_child_process(int signal_number);
 int done = 0;
 
 sig_atomic_t child_exit_status;
+struct sigaction sigchld_action;
 
 /*
  * Name: main
@@ -52,13 +53,11 @@ int main(void)
   Command cmd;
   int n;
   /* Handle the termination of a child process */
-  struct sigaction sigchld_action;
   memset (&sigchld_action, 0, sizeof (sigchld_action));
   sigchld_action.sa_handler = &clean_up_child_process;
   sigaction (SIGCHLD, &sigchld_action, NULL);
 
   while (!done) {
-
     char *line;
     line = readline("> ");
 
@@ -94,29 +93,31 @@ int main(void)
           dirPath = getcwd(dirPath, 100);
           printf("%s\n", dirPath);
         }
-
-        pid_t pid;
-        int status;
-
-        printf("%d, I'm the parent\n", getpid());
-        pid = fork();
-
-        if (pid == 0) {
-          execvp(usrcmd, cmd.pgm->pgmlist);
-        }
-        else if (pid < 0) {
-          printf("Something wrong");
-          exit(1);
-        }
         else {
-          if (cmd.background) {
-            continue;
+
+          pid_t pid;
+          int status;
+
+          printf("%d, I'm the parent\n", getpid());
+          pid = fork();
+
+          if (pid == 0) {
+            execvp(usrcmd, cmd.pgm->pgmlist);
           }
-          if (waitpid(pid, &status, 0) != pid) {
-            printf("%i\n", status);
+          else if (pid < 0) {
+            printf("Something wrong");
+            exit(1);
           }
           else {
-            printf("test\n");
+            if (cmd.background) {
+              continue;
+            }
+            if (waitpid(pid, &status, 0) != pid) {
+              printf("%i\n", status);
+            }
+            else {
+              printf("test\n");
+            }
           }
         }
 
