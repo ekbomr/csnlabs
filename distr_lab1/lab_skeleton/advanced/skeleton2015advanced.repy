@@ -36,12 +36,11 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       else:
         vesselIPs = mycontext['iplist']
         for ipaddr in vesselIPs:
-          if ipaddr == mycontext['myIP']:
-            continue
-          else:
+          if not ipaddr == mycontext['myIP']:
             socketobject = openconn(ipaddr, mycontext['myPort'])
             socketobject.send(msg)
 
+      addMessageToBoard(msgheader)
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
@@ -59,10 +58,12 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
 
+# Takes the recieved message and adds it to the list of board messages.
 def addMessageToBoard(msgheader):
   msg = msgheader[msgheader.find('comment') + 8: ]
   mycontext['boardMessages'].insert(0, msg)
 
+# Refreshes the page and sends an acknowledgement to the browser
 def refresh_page(sockobj):
   htmlresponse = generate_html_page()
   sockobj.send("HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
@@ -70,11 +71,8 @@ def refresh_page(sockobj):
 
 # ------------------------------------------------------------------------------
 # Outputs the blackboard html
-# Optional parameters are message and error which are introduced as headers into the html.
 # ------------------------------------------------------------------------------
-def generate_html_page(status=""):
-  #Initialize blackboard content
-  # one sample entry
+def generate_html_page():
   entry = ""
   if mycontext['boardMessages'] == []:
     entry = "Empty..."
@@ -88,11 +86,8 @@ def generate_html_page(status=""):
   # merging the contents of the board with the title
   # and wrapping all with <div id="boardcontents_placeholder”>...</div>
   content = '<div id="boardcontents_placeholder">%s%s</div>' %(board_title, content)
-  # An optional status message
-  #status_message = "<div class='status'>%s</div>" % (status)
   #Concatenate strings into huge string representing the final html
   content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
-  #print content
   return content
 
 # ------------------------------------------------------------------------------
