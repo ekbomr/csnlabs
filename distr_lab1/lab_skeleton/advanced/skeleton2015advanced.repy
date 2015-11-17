@@ -14,6 +14,18 @@ def start_board():
     print ("Exception in start_board: %s, %s\n" %(type(e), e))
     raise
 
+def start_election():
+  ip = mycontext['myIP']
+  port = mycontext['myPort']
+  settimer(5, sendCandidateID, [])
+  try:
+    listenToPrevNeighbor = waitforconn(ip, port, elect_leader)
+  except Exception, e:
+    print ("Exception in start_election: %s, %s\n" %(type(e), e))
+    raise
+
+
+
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
 # ------------------------------------------------------------------------------
@@ -90,6 +102,42 @@ def generate_html_page():
   content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
   return content
 
+def sendCandidateID():
+  try:
+    msg = mycontext['leader'][0] + ': ' + str(mycontext['leader'][1])
+    neighborConnection = openconn(mycontext['myNeighbor'], port)
+    neighborConnection.send(msg)
+    neighborConnection.close()
+  except Exception, e:
+    print "Exception in elect_leader: %s, %s\n" %(type(e), e)
+    raise
+
+
+def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
+  try:
+    leaderfound = False
+    msg = sockobj.recv(1024) # Receive message,
+    candidateID = float(msg[msg.find(':') + 1: ])
+    stopcomm(thiscommhandle)
+    print "candidateID: " + str(candidateID)
+
+    if mycontext['leader'][1] > candidateID:
+      candidateIPaddr = msg[: msg.find(':')]
+      mycontext['leader'] = (candidateIPaddr, candidateID)
+
+    if mycontext['leader'][1] == candidateID:
+      leaderfound = True
+      print('leader found! IP: %s ID: %f' %(mycontext['leader'][0], mycontext['leader'][1]))
+      #stopcomm(listencommhandle)
+      #start_board()
+    else:
+      sendCandidateID()
+
+  except Exception, e:
+    print "Exception in receiveCandidateID: %s, %s\n" %(type(e), e)
+    raise
+
+
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
 # and calls start_board() which opens the socket for incoming connections.
@@ -101,13 +149,23 @@ if callfunc == 'initialize':
     port = int(callargs[0])
     ip = getmyip()
 
-    vesselIPs = []
-    ipList = open('iplist.txt', 'r')
-    for ipaddr in ipList:
-      vesselIPs.append(ipaddr.rstrip())
+    mycontext['myNeighbor'] = ""
+    ipFile = open('iplist.txt', 'r')
+    ipList = ipFile.readlines()
+    ipFile.close()
 
-    mycontext['iplist'] = vesselIPs
-    ipList.close()
+    for index in range(len(ipList)):
+      if index == (len(ipList) - 1):
+        mycontext['myNeighbor'] = ipList[0].rstrip()
+      elif ip == ipList[index].rstrip():
+        mycontext['myNeighbor'] = ipList[index + 1].rstrip()
+        break
+
+    print "my IP: " + ip + ", neighborIP: " + mycontext['myNeighbor']
+    #LAB 1
+    #for ipaddr in ipList:
+    #  vesselIPs.append(ipaddr.rstrip())
+    #mycontext['iplist'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
@@ -124,9 +182,12 @@ if callfunc == 'initialize':
   mycontext['myPort'] = port
   mycontext['myIP'] = ip
   #read header and footer html files
-  mycontext['headerhtml'] = file("header.html").read()
-  mycontext['footerhtml'] = file("footer.html").read()
+  #mycontext['headerhtml'] = file("header.html").read()
+  #mycontext['footerhtml'] = file("footer.html").read()
 
   mycontext['boardMessages'] = []
+  mycontext['leader'] = (ip, randomfloat())
+  print "my ID: " + str(mycontext['leader'][1])
 
-  start_board()
+
+  start_election()
