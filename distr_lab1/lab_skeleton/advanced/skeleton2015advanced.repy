@@ -24,8 +24,6 @@ def start_election():
     print ("Exception in start_election: %s, %s\n" %(type(e), e))
     raise
 
-
-
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
 # ------------------------------------------------------------------------------
@@ -37,28 +35,46 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
-    elif msgheader.startswith( 'POST' ):
-      print "got POST:\n", msgheader
-      msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
+    #elif msgheader.startswith( 'POST' ):
+    #  print "got POST:\n", msgheader
+    #  msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
 
-      #If running locally
-      if len(callargs) == 2:
-        socketobject = openconn('127.0.0.1', 63101)
-        socketobject.send(msg)
-      else:
-        vesselIPs = mycontext['iplist']
-        for ipaddr in vesselIPs:
-          if not ipaddr == mycontext['myIP']:
+    #  #If running locally
+    #  if len(callargs) == 2:
+    #    socketobject = openconn('127.0.0.1', 63101)
+    #    socketobject.send(msg)
+    #  else:
+    #    vesselIPs = mycontext['iplist']
+    #    for ipaddr in vesselIPs:
+    #      if not ipaddr == mycontext['myIP']:
+    #        socketobject = openconn(ipaddr, mycontext['myPort'])
+    #        socketobject.send(msg)
+    elif msgheader.startswith('POST'):
+      if mycontext['myIP'] == mycontext['leader'][0]:
+        mycontext['lock'].acquire()
+        print 'got POST for LEADER'
+        msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
+        for ipaddr in mycontext['ipList']:
+          if not mycontext['myIP'] == ipaddr.rstrip():
             socketobject = openconn(ipaddr, mycontext['myPort'])
             socketobject.send(msg)
 
-      addMessageToBoard(msgheader)
-      refresh_page(sockobj)
-      stopcomm(thiscommhandle)
+        mycontext['lock'].release()
+        addMessageToBoard(msgheader)
+        refresh_page(sockobj)
+        stopcomm(thiscommhandle)
+
+      else:
+        socketobject = openconn(mycontext['leader'][0], mycontext['myPort'])
+        socketobject.send(msgheader)
+
+        #addMessageToBoard(msgheader)
+        refresh_page(sockobj)
+        stopcomm(thiscommhandle)
 
     #Receive a board update from the posting vessel
     elif msgheader.startswith('BOARD_UPDATE'):
-      print "got BOARD_UPDATE:\n", msgheader
+      print "got BOARD_UPDATE:\n"
       addMessageToBoard(msgheader)
       stopcomm(thiscommhandle)
 
@@ -97,7 +113,9 @@ def generate_html_page():
   board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['myIP'], mycontext['myPort'], int(getruntime()))
   # merging the contents of the board with the title
   # and wrapping all with <div id="boardcontents_placeholder”>...</div>
-  content = '<div id="boardcontents_placeholder">%s%s</div>' %(board_title, content)
+  leader = '<div><p>The leader is: %s with ID: %f</p></div>' %(mycontext['leader'][0], mycontext['leader'][1])
+
+  content = '<div id="boardcontents_placeholder">%s%s</div>%s' %(board_title, content, leader)
   #Concatenate strings into huge string representing the final html
   content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
   return content
@@ -121,24 +139,27 @@ def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
     msg = sockobj.recv(1024) # Receive message,
     if msg.startswith("LEADER_FOUND"):
       msg = msg[12:]
-      print "LEADER_FOUND"
+      #print "LEADER_FOUND"
       leaderFound = True
     else:
       leaderFound = False
 
     candidateID = float(msg[msg.find(':') + 1: ].rstrip())
     candidateIPaddr = msg[: msg.find(':')]
-    print "candidateID: " + str(candidateID)
+    #print "candidateID: " + str(candidateID)
 
     if floatIsEqual(mycontext['leader'][1], candidateID):
       if leaderFound:
-        print "Found leader, turning of listener"
         if mycontext['myIP'] != candidateIPaddr:
           sendCandidateID(leaderFound)
+          print "Found leader, turning of listener"
+          print "sending final msg"
 
-        #stopcomm(thiscommhandle)
+        stopcomm(thiscommhandle)
+        #Kanske ska ha en timer för att stänga av lyssnaren, kan bli
+        #connection refused (?)
         stopcomm(listencommhandle)
-        #start_board()
+        start_board()
 
       elif mycontext['myIP'] == candidateIPaddr:
         print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
@@ -171,7 +192,8 @@ if callfunc == 'initialize':
 
     mycontext['myNeighbor'] = ""
     ipFile = open('iplist.txt', 'r')
-    ipList = ipFile.readlines()
+    mycontext['ipList'] = ipFile.readlines()
+    ipList = mycontext['ipList']
     ipFile.close()
 
     for index in range(len(ipList)):
@@ -202,12 +224,12 @@ if callfunc == 'initialize':
   mycontext['myPort'] = port
   mycontext['myIP'] = ip
   #read header and footer html files
-  #mycontext['headerhtml'] = file("header.html").read()
-  #mycontext['footerhtml'] = file("footer.html").read()
+  mycontext['headerhtml'] = file("header.html").read()
+  mycontext['footerhtml'] = file("footer.html").read()
 
   mycontext['boardMessages'] = []
   mycontext['leader'] = (ip, randomfloat())
-  print "my ID: " + str(mycontext['leader'][1])
-
+  #print "my ID: " + str(mycontext['leader'][1])
+  mycontext['lock'] = getlock()
 
   start_election()
