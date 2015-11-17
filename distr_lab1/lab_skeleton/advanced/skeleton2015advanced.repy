@@ -17,7 +17,7 @@ def start_board():
 def start_election():
   ip = mycontext['myIP']
   port = mycontext['myPort']
-  settimer(5, sendCandidateID, [])
+  settimer(5, sendCandidateID, [False])
   try:
     listenToPrevNeighbor = waitforconn(ip, port, elect_leader)
   except Exception, e:
@@ -102,41 +102,61 @@ def generate_html_page():
   content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
   return content
 
-def sendCandidateID():
+def sendCandidateID(leaderFound):
   try:
     msg = mycontext['leader'][0] + ': ' + str(mycontext['leader'][1])
+    if leaderFound:
+      msg = "LEADER_FOUND" + msg
+
     neighborConnection = openconn(mycontext['myNeighbor'], port)
     neighborConnection.send(msg)
     neighborConnection.close()
   except Exception, e:
-    print "Exception in elect_leader: %s, %s\n" %(type(e), e)
+    print "Exception in sendCandidateID: %s, %s\n" %(type(e), e)
     raise
 
 
 def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
   try:
-    leaderfound = False
     msg = sockobj.recv(1024) # Receive message,
-    candidateID = float(msg[msg.find(':') + 1: ])
-    stopcomm(thiscommhandle)
+    if msg.startswith("LEADER_FOUND"):
+      msg = msg[12:]
+      print "LEADER_FOUND"
+      leaderFound = True
+    else:
+      leaderFound = False
+
+    candidateID = float(msg[msg.find(':') + 1: ].rstrip())
+    candidateIPaddr = msg[: msg.find(':')]
     print "candidateID: " + str(candidateID)
 
-    if mycontext['leader'][1] > candidateID:
-      candidateIPaddr = msg[: msg.find(':')]
-      mycontext['leader'] = (candidateIPaddr, candidateID)
+    if floatIsEqual(mycontext['leader'][1], candidateID):
+      if leaderFound:
+        print "Found leader, turning of listener"
+        if mycontext['myIP'] != candidateIPaddr:
+          sendCandidateID(leaderFound)
 
-    if mycontext['leader'][1] == candidateID:
-      leaderfound = True
-      print('leader found! IP: %s ID: %f' %(mycontext['leader'][0], mycontext['leader'][1]))
-      #stopcomm(listencommhandle)
-      #start_board()
-    else:
-      sendCandidateID()
+        #stopcomm(thiscommhandle)
+        stopcomm(listencommhandle)
+        #start_board()
+
+      elif mycontext['myIP'] == candidateIPaddr:
+        print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
+        leaderFound = True
+        sendCandidateID(leaderFound)
+
+    elif mycontext['leader'][1] > candidateID:
+      mycontext['leader'] = (candidateIPaddr, candidateID)
+      sendCandidateID(leaderFound)
+
+    #stopcomm(thiscommhandle)
 
   except Exception, e:
-    print "Exception in receiveCandidateID: %s, %s\n" %(type(e), e)
+    print "Exception in elect_leader: %s, %s\n" %(type(e), e)
     raise
 
+def floatIsEqual(leader, candidate):
+  return abs(leader - candidate) <= 0.00001
 
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
