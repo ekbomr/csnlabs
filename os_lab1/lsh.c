@@ -26,6 +26,7 @@
  #include <string.h>
  #include <signal.h>
  #include <sys/types.h>
+ #include <errno.h>
 
 /* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
@@ -37,12 +38,14 @@ void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 void clean_up_child_process(int signal_number);
+void handle_sigint(int signal_number);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+pid_t pid = 0;
 
 sig_atomic_t child_exit_status;
-struct sigaction sigchld_action;
+struct sigaction sigchld_action, sigint_action;
 
 /*
  * Name: main
@@ -53,9 +56,12 @@ int main(void)
   Command cmd;
   int n;
   /* Handle the termination of a child process */
-  memset (&sigchld_action, 0, sizeof (sigchld_action));
+  memset(&sigchld_action, 0, sizeof (sigchld_action));
+  memset(&sigint_action, 0, sizeof (sigint_action));
   sigchld_action.sa_handler = &clean_up_child_process;
-  sigaction (SIGCHLD, &sigchld_action, NULL);
+  sigint_action.sa_handler = &handle_sigint;
+  sigaction(SIGCHLD, &sigchld_action, NULL);
+  sigaction(SIGINT, &sigint_action, NULL);
 
   while (!done) {
     char *line;
@@ -95,13 +101,22 @@ int main(void)
         }
         else {
 
-          pid_t pid;
+          int pipe_fds[2];
+          int read_fd;
+          int write_fd;
+
+          pipe(pipe_fds);
+          read_fd = pipe_fds[0];
+          write_fd = pipe_fds[1];
+          //pid_t pid;
           int status;
 
           printf("%d, I'm the parent\n", getpid());
+          //pid = fork();
           pid = fork();
-
           if (pid == 0) {
+            close(read_fd);
+            close(write_fd);
             execvp(usrcmd, cmd.pgm->pgmlist);
           }
           else if (pid < 0) {
@@ -109,16 +124,15 @@ int main(void)
             exit(1);
           }
           else {
+            close(write_fd);
             if (cmd.background) {
               continue;
             }
             if (waitpid(pid, &status, 0) != pid) {
               printf("%i\n", status);
             }
-            else {
-              printf("test\n");
-            }
           }
+
         }
 
       }
@@ -138,6 +152,10 @@ void clean_up_child_process (int signal_number)
   wait(&status);
   /* Store its exit status in a global variable. */
   child_exit_status = status;
+}
+
+void handle_sigint (int signal_number){
+  kill(pid, SIGINT);
 }
 
 /*
