@@ -35,22 +35,9 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
-    #elif msgheader.startswith( 'POST' ):
-    #  print "got POST:\n", msgheader
-    #  msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
-
-    #  #If running locally
-    #  if len(callargs) == 2:
-    #    socketobject = openconn('127.0.0.1', 63101)
-    #    socketobject.send(msg)
-    #  else:
-    #    vesselIPs = mycontext['iplist']
-    #    for ipaddr in vesselIPs:
-    #      if not ipaddr == mycontext['myIP']:
-    #        socketobject = openconn(ipaddr, mycontext['myPort'])
-    #        socketobject.send(msg)
     elif msgheader.startswith('POST'):
       if mycontext['myIP'] == mycontext['leader'][0]:
+
         mycontext['lock'].acquire()
         print 'got POST for LEADER'
         msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
@@ -68,7 +55,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
         socketobject = openconn(mycontext['leader'][0], mycontext['myPort'])
         socketobject.send(msgheader)
 
-        #addMessageToBoard(msgheader)
         refresh_page(sockobj)
         stopcomm(thiscommhandle)
 
@@ -125,59 +111,71 @@ def sendCandidateID(leaderFound):
     msg = mycontext['leader'][0] + ': ' + str(mycontext['leader'][1])
     if leaderFound:
       msg = "LEADER_FOUND" + msg
+    else:
+      msg = "ELECTION" + msg
 
     neighborConnection = openconn(mycontext['myNeighbor'], port)
     neighborConnection.send(msg)
     neighborConnection.close()
+
   except Exception, e:
     print "Exception in sendCandidateID: %s, %s\n" %(type(e), e)
     raise
 
-
 def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
   try:
     msg = sockobj.recv(1024) # Receive message,
-    if msg.startswith("LEADER_FOUND"):
-      msg = msg[12:]
-      #print "LEADER_FOUND"
-      leaderFound = True
-    else:
-      leaderFound = False
-
-    candidateID = float(msg[msg.find(':') + 1: ].rstrip())
-    candidateIPaddr = msg[: msg.find(':')]
-    #print "candidateID: " + str(candidateID)
-
-    if floatIsEqual(mycontext['leader'][1], candidateID):
-      if leaderFound:
-        if mycontext['myIP'] != candidateIPaddr:
-          sendCandidateID(leaderFound)
-          print "Found leader, turning of listener"
-          print "sending final msg"
-
-        stopcomm(thiscommhandle)
-        #Kanske ska ha en timer för att stänga av lyssnaren, kan bli
-        #connection refused (?)
-        stopcomm(listencommhandle)
-        start_board()
-
-      elif mycontext['myIP'] == candidateIPaddr:
-        print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
+    if msg.startswith("LEADER_FOUND") or msg.startswith("ELECTION"):
+      if msg.startswith("LEADER_FOUND"):
+        msg = msg[12:]
         leaderFound = True
+      else:
+        msg = msg[8:]
+        leaderFound = False
+
+      candidateID = float(msg[msg.find(':') + 1: ].rstrip())
+      candidateIPaddr = msg[: msg.find(':')]
+
+      if floatIsEqual(mycontext['leader'][1], candidateID):
+        if leaderFound:
+          if mycontext['myIP'] != candidateIPaddr:
+            sendCandidateID(leaderFound)
+            print "Found leader, turning of listener"
+            print "sending final msg"
+
+          stopcomm(thiscommhandle)
+          stopcomm(listencommhandle)
+          start_board()
+
+        elif mycontext['myIP'] == candidateIPaddr:
+          print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
+          leaderFound = True
+          sendCandidateID(leaderFound)
+
+      elif mycontext['leader'][1] > candidateID:
+        mycontext['leader'] = (candidateIPaddr, candidateID)
         sendCandidateID(leaderFound)
-
-    elif mycontext['leader'][1] > candidateID:
-      mycontext['leader'] = (candidateIPaddr, candidateID)
-      sendCandidateID(leaderFound)
-
-    #stopcomm(thiscommhandle)
 
   except Exception, e:
     print "Exception in elect_leader: %s, %s\n" %(type(e), e)
     raise
 
 def floatIsEqual(leader, candidate):
-  return abs(leader - candidate) <= 0.00001
+  return abs(leader - candidate) <= 0.0000001
+
+def initiateRing(myIP):
+  ipFile = open('iplist.txt', 'r')
+  mycontext['ipList'] = ipFile.readlines()
+  ipList = mycontext['ipList']
+  ipFile.close()
+
+  for index in range(len(ipList)):
+    if index == (len(ipList) - 1):
+      mycontext['myNeighbor'] = ipList[0].rstrip()
+    elif myIP == ipList[index].rstrip():
+      mycontext['myNeighbor'] = ipList[index + 1].rstrip()
+      break
+
 
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
@@ -191,23 +189,8 @@ if callfunc == 'initialize':
     ip = getmyip()
 
     mycontext['myNeighbor'] = ""
-    ipFile = open('iplist.txt', 'r')
-    mycontext['ipList'] = ipFile.readlines()
-    ipList = mycontext['ipList']
-    ipFile.close()
-
-    for index in range(len(ipList)):
-      if index == (len(ipList) - 1):
-        mycontext['myNeighbor'] = ipList[0].rstrip()
-      elif ip == ipList[index].rstrip():
-        mycontext['myNeighbor'] = ipList[index + 1].rstrip()
-        break
-
+    initiateRing(ip)
     print "my IP: " + ip + ", neighborIP: " + mycontext['myNeighbor']
-    #LAB 1
-    #for ipaddr in ipList:
-    #  vesselIPs.append(ipaddr.rstrip())
-    #mycontext['iplist'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
