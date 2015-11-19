@@ -106,17 +106,16 @@ int main(void)
           int pipe_fds[2];
           int read_fd;
           int write_fd;
+          Pgm *nextPgm;
 
           pipe(pipe_fds);
           read_fd = pipe_fds[0];
           write_fd = pipe_fds[1];
 
           do {
-            printf("Entered while loop...\n");
             pid = fork();
             if (pid == 0) {
               dup2(pipe_fds[1], STDOUT_FILENO);
-              close(read_fd);
               close(write_fd);
               execvp(usrcmd, cmd.pgm->pgmlist);
             }
@@ -127,7 +126,8 @@ int main(void)
             else {
               ssize_t count;
               char buffer[4096];
-              printf("%d, I'm the parent\n", getpid());
+              /* Clear the buffer */
+              memset(buffer, 0, sizeof(buffer));
               close(write_fd);
 
               count = read(read_fd, buffer, sizeof(buffer));
@@ -135,14 +135,20 @@ int main(void)
               if (count == -1) {
                 printf("Error reading FD!");
               }
-              /* Behöver köra flush el. dyl? Output ligger kvar från tidigare*/
-              printf("Output from child: %s\n", buffer);
+
+              printf("Output from child (%d bytes): \n\n%s",(int)count, buffer);
 
               if (cmd.background) {
                 continue;
               }
               if (waitpid(pid, &status, 0) != pid) {
                 printf("%i\n", status);
+              }
+              nextPgm = cmd.pgm->next;
+              if (nextPgm != NULL) {
+                printf("Pipe detected, setting new usrcmd...");
+                dup2(read_fd, STDIN_FILENO);
+                usrcmd = nextPgm->pgmlist[0];
               }
             }
           } while(cmd.pgm->next != NULL);
