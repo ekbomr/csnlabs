@@ -42,7 +42,7 @@ void handle_sigint(int signal_number);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
-pid_t pid = 0;
+pid_t pid;
 
 sig_atomic_t child_exit_status;
 struct sigaction sigchld_action, sigint_action;
@@ -108,30 +108,43 @@ int main(void)
           pipe(pipe_fds);
           read_fd = pipe_fds[0];
           write_fd = pipe_fds[1];
-          //pid_t pid;
           int status;
 
-          printf("%d, I'm the parent\n", getpid());
-          //pid = fork();
-          pid = fork();
-          if (pid == 0) {
-            close(read_fd);
-            close(write_fd);
-            execvp(usrcmd, cmd.pgm->pgmlist);
-          }
-          else if (pid < 0) {
-            printf("Something wrong");
-            exit(1);
-          }
-          else {
-            close(write_fd);
-            if (cmd.background) {
-              continue;
+          do {
+            printf("Entered while loop...\n");
+            pid = fork();
+            if (pid == 0) {
+              dup2(pipe_fds[1], STDOUT_FILENO);
+              close(read_fd);
+              close(write_fd);
+              execvp(usrcmd, cmd.pgm->pgmlist);
             }
-            if (waitpid(pid, &status, 0) != pid) {
-              printf("%i\n", status);
+            else if (pid < 0) {
+              printf("Something wrong");
+              exit(1);
             }
-          }
+            else {
+              printf("%d, I'm the parent\n", getpid());
+              close(write_fd);
+
+              char buffer[4096];
+              ssize_t count = read(read_fd, buffer, sizeof(buffer));
+              close(read_fd);
+              if (count == -1) {
+                printf("Error reading FD!");
+              }
+
+              printf("Output from child: %s\n", buffer);
+
+              if (cmd.background) {
+                continue;
+              }
+              if (waitpid(pid, &status, 0) != pid) {
+                printf("%i\n", status);
+              }
+            }
+          } while(cmd.pgm->next != NULL);
+
 
         }
 
@@ -155,6 +168,7 @@ void clean_up_child_process (int signal_number)
 }
 
 void handle_sigint (int signal_number){
+  printf("Ctrl+C detected. Terminating PID: %ld", (long)pid);
   kill(pid, SIGINT);
 }
 
