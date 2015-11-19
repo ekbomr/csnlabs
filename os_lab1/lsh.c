@@ -72,6 +72,8 @@ int main(void)
       done = 1;
     }
     else {
+      char *usrcmd;
+      char *dirPath;
       /*
        * Remove leading and trailing whitespace from the line
        * Then, if there is anything left, add it to the history list
@@ -84,7 +86,7 @@ int main(void)
         n = parse(line, &cmd);
         PrintCommand(n, &cmd);
 
-        char *usrcmd = cmd.pgm->pgmlist[0];
+        usrcmd = cmd.pgm->pgmlist[0];
         if (strcmp(usrcmd, "exit") == 0) {
           return 0;
         }
@@ -95,12 +97,12 @@ int main(void)
           else {
             chdir(getenv("HOME"));
           }
-          char *dirPath;
           dirPath = getcwd(dirPath, 100);
           printf("%s\n", dirPath);
         }
         else {
 
+          int status;
           int pipe_fds[2];
           int read_fd;
           int write_fd;
@@ -108,7 +110,6 @@ int main(void)
           pipe(pipe_fds);
           read_fd = pipe_fds[0];
           write_fd = pipe_fds[1];
-          int status;
 
           do {
             printf("Entered while loop...\n");
@@ -124,16 +125,17 @@ int main(void)
               exit(1);
             }
             else {
+              ssize_t count;
+              char buffer[4096];
               printf("%d, I'm the parent\n", getpid());
               close(write_fd);
 
-              char buffer[4096];
-              ssize_t count = read(read_fd, buffer, sizeof(buffer));
+              count = read(read_fd, buffer, sizeof(buffer));
               close(read_fd);
               if (count == -1) {
                 printf("Error reading FD!");
               }
-
+              /* Behöver köra flush el. dyl? Output ligger kvar från tidigare*/
               printf("Output from child: %s\n", buffer);
 
               if (cmd.background) {
@@ -168,7 +170,7 @@ void clean_up_child_process (int signal_number)
 }
 
 void handle_sigint (int signal_number){
-  printf("Ctrl+C detected. Terminating PID: %ld", (long)pid);
+  printf("Ctrl+C detected. Terminating...");
   kill(pid, SIGINT);
 }
 
