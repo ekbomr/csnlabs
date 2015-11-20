@@ -49,19 +49,6 @@ void clean_up_child_process(int signal_number);
 void handle_sigint(int signal_number);
 
 void execNextPgm (Pgm *nextPgm) {
-  // int pipe_fds[2];
-  // int read_fd;
-  // int write_fd;
-  //
-  // printf("Pipe detected...");
-  // pipe(pipe_fds);
-  // read_fd = pipe_fds[0];
-  // write_fd = pipe_fds[1];
-  // dup2(read_fd, STDIN_FILENO);
-  // close(read_fd);
-  // dup2(write_fd, STDOUT_FILENO);
-  // close(write_fd);
-
 
   /* Base case */
   if (nextPgm->next == NULL) {
@@ -69,6 +56,14 @@ void execNextPgm (Pgm *nextPgm) {
   }
 
   else {
+
+    int pipe_fds[2];
+    int read_fd;
+    int write_fd;
+    pipe(pipe_fds);
+    read_fd = pipe_fds[0];
+    write_fd = pipe_fds[1];
+
     pid = fork();
     if (pid < 0) {
       printf("Fork error. Exiting...");
@@ -77,6 +72,9 @@ void execNextPgm (Pgm *nextPgm) {
 
     /* (Grand)child process */
     else if (pid == 0) {
+      dup2(write_fd, STDOUT_FILENO);
+      close(write_fd);
+      //close(write_fd);
       /* Point to next program and execute recursively */
       nextPgm = nextPgm->next;
       execNextPgm(nextPgm);
@@ -84,9 +82,15 @@ void execNextPgm (Pgm *nextPgm) {
 
     /* Parent process */
     else {
+      dup2(read_fd, STDIN_FILENO);
+      close(read_fd);
+      close(write_fd);
       if (waitpid(pid, &status, 0) != pid) {
         printf("Wait status message: %i\n", status);
       }
+
+      execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
+
     }
   }
 }
