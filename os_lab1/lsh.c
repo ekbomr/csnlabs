@@ -27,6 +27,7 @@
  #include <signal.h>
  #include <sys/types.h>
  #include <errno.h>
+ #include <fcntl.h>
 
 /* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
@@ -155,6 +156,19 @@ int main(void)
 
           /* Child process */
           else if (pid == 0) {
+            /* Redirect input/output if *file* > *cmd* */
+            if (cmd.rstdin != NULL) {
+              int read_fd;
+              read_fd = open(cmd.rstdin, O_RDONLY);
+              dup2(read_fd, STDIN_FILENO);
+            }
+            if (cmd.rstdout != NULL) {
+              int write_fd;
+              write_fd = open(cmd.rstdout, O_TRUNC | O_CREAT | O_WRONLY);
+              dup2(write_fd, STDOUT_FILENO);
+              //close(write_fd);
+            }
+
             execNextPgm(nextPgm);
           }
 
