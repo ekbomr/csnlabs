@@ -103,59 +103,37 @@ int main(void)
         else {
 
           int status;
-          int pipe_fds[2];
-          int read_fd;
-          int write_fd;
-          Pgm *nextPgm;
+          // int pipe_fds[2];
+          // int read_fd;
+          // int write_fd;
+          //
+          // pipe(pipe_fds);
+          // read_fd = pipe_fds[0];
+          // write_fd = pipe_fds[1];
+          // dup2(read_fd, STDIN_FILENO);
 
-          pipe(pipe_fds);
-          read_fd = pipe_fds[0];
-          write_fd = pipe_fds[1];
+          pid = fork();
+          if (pid < 0) {
+            printf("Something wrong");
+            exit(1);
+          }
 
-          do {
-            pid = fork();
-            if (pid == 0) {
-              dup2(pipe_fds[1], STDOUT_FILENO);
-              close(write_fd);
-              execvp(usrcmd, cmd.pgm->pgmlist);
+          /* Child process */
+          else if (pid == 0) {
+            execvp(usrcmd, cmd.pgm->pgmlist);
+          }
+
+          /* Parent process */
+          else {
+            if (cmd.background) {
+              continue;
             }
-            else if (pid < 0) {
-              printf("Something wrong");
-              exit(1);
+            if (waitpid(pid, &status, 0) != pid) {
+              printf("%i\n", status);
             }
-            else {
-              ssize_t count;
-              char buffer[4096];
-              /* Clear the buffer */
-              memset(buffer, 0, sizeof(buffer));
-              close(write_fd);
-
-              count = read(read_fd, buffer, sizeof(buffer));
-              close(read_fd);
-              if (count == -1) {
-                printf("Error reading FD!");
-              }
-
-              printf("Output from child (%d bytes): \n\n%s",(int)count, buffer);
-
-              if (cmd.background) {
-                continue;
-              }
-              if (waitpid(pid, &status, 0) != pid) {
-                printf("%i\n", status);
-              }
-              nextPgm = cmd.pgm->next;
-              if (nextPgm != NULL) {
-                printf("Pipe detected, setting new usrcmd...");
-                dup2(read_fd, STDIN_FILENO);
-                usrcmd = nextPgm->pgmlist[0];
-              }
-            }
-          } while(cmd.pgm->next != NULL);
-
+          }
 
         }
-
       }
     }
 
