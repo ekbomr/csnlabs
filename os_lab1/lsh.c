@@ -30,6 +30,14 @@
 
 /* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
 
+/* When non-zero, this global means the user is done using this program. */
+int done = 0;
+pid_t pid;
+int status;
+
+sig_atomic_t child_exit_status;
+struct sigaction sigchld_action, sigint_action;
+
 /*
  * Function declarations
  */
@@ -40,17 +48,51 @@ void stripwhite(char *);
 void clean_up_child_process(int signal_number);
 void handle_sigint(int signal_number);
 
-/* When non-zero, this global means the user is done using this program. */
-int done = 0;
-pid_t pid;
+void execNextPgm (Pgm *nextPgm) {
 
-sig_atomic_t child_exit_status;
-struct sigaction sigchld_action, sigint_action;
+  /* Base case */
+  if (nextPgm->next == NULL) {
+    // int pipe_fds[2];
+    // int read_fd;
+    // int write_fd;
+    //
+    // printf("Pipe detected...");
+    // pipe(pipe_fds);
+    // read_fd = pipe_fds[0];
+    // write_fd = pipe_fds[1];
+    // dup2(read_fd, STDIN_FILENO);
+    // close(read_fd);
+    // dup2(write_fd, STDOUT_FILENO);
+    // close(write_fd);
 
-/*
- * Name: main
- * Description: Gets the ball rolling...
- */
+
+    pid = fork();
+    if (pid < 0) {
+      printf("Something wrong");
+      exit(1);
+    }
+
+    /* (Grand)child process */
+    else if (pid == 0) {
+      execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
+    }
+
+    /* Parent process */
+    else {
+      if (waitpid(pid, &status, 0) != pid) {
+        printf("Wait status message: %i\n", status);
+      }
+    }
+  }
+
+  /* Point to next program and execute recursively */
+  else {
+    nextPgm = nextPgm->next;
+    execNextPgm(nextPgm);
+  }
+
+}
+
 int main(void)
 {
   Command cmd;
@@ -102,37 +144,13 @@ int main(void)
         }
         else {
 
-          int status;
-          // int pipe_fds[2];
-          // int read_fd;
-          // int write_fd;
-          //
-          // pipe(pipe_fds);
-          // read_fd = pipe_fds[0];
-          // write_fd = pipe_fds[1];
-          // dup2(read_fd, STDIN_FILENO);
+          execNextPgm(cmd.pgm);
 
-          pid = fork();
-          if (pid < 0) {
-            printf("Something wrong");
-            exit(1);
-          }
-
-          /* Child process */
-          else if (pid == 0) {
-            execvp(usrcmd, cmd.pgm->pgmlist);
-          }
-
-          /* Parent process */
-          else {
-            if (cmd.background) {
-              continue;
-            }
+          if (!cmd.background) {
             if (waitpid(pid, &status, 0) != pid) {
               printf("%i\n", status);
             }
           }
-
         }
       }
     }
@@ -143,6 +161,7 @@ int main(void)
   }
   return 0;
 }
+
 
 void clean_up_child_process (int signal_number)
 {
