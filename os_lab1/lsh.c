@@ -65,16 +65,22 @@ void execNextPgm (Pgm *nextPgm) {
     // dup2(write_fd, STDOUT_FILENO);
     // close(write_fd);
 
+    execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
 
+  }
+
+  else {
     pid = fork();
     if (pid < 0) {
-      printf("Something wrong");
+      printf("Fork error. Exiting...");
       exit(1);
     }
 
     /* (Grand)child process */
     else if (pid == 0) {
-      execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
+      /* Point to next program and execute recursively */
+      nextPgm = nextPgm->next;
+      execNextPgm(nextPgm);
     }
 
     /* Parent process */
@@ -84,13 +90,6 @@ void execNextPgm (Pgm *nextPgm) {
       }
     }
   }
-
-  /* Point to next program and execute recursively */
-  else {
-    nextPgm = nextPgm->next;
-    execNextPgm(nextPgm);
-  }
-
 }
 
 int main(void)
@@ -173,7 +172,7 @@ void clean_up_child_process (int signal_number)
 }
 
 void handle_sigint (int signal_number){
-  printf("Ctrl+C detected. Terminating...");
+  printf("Ctrl+C detected. Terminating...\n");
   kill(pid, SIGINT);
 }
 
