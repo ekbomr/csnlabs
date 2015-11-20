@@ -49,24 +49,23 @@ void clean_up_child_process(int signal_number);
 void handle_sigint(int signal_number);
 
 void execNextPgm (Pgm *nextPgm) {
+  // int pipe_fds[2];
+  // int read_fd;
+  // int write_fd;
+  //
+  // printf("Pipe detected...");
+  // pipe(pipe_fds);
+  // read_fd = pipe_fds[0];
+  // write_fd = pipe_fds[1];
+  // dup2(read_fd, STDIN_FILENO);
+  // close(read_fd);
+  // dup2(write_fd, STDOUT_FILENO);
+  // close(write_fd);
+
 
   /* Base case */
   if (nextPgm->next == NULL) {
-    // int pipe_fds[2];
-    // int read_fd;
-    // int write_fd;
-    //
-    // printf("Pipe detected...");
-    // pipe(pipe_fds);
-    // read_fd = pipe_fds[0];
-    // write_fd = pipe_fds[1];
-    // dup2(read_fd, STDIN_FILENO);
-    // close(read_fd);
-    // dup2(write_fd, STDOUT_FILENO);
-    // close(write_fd);
-
     execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
-
   }
 
   else {
@@ -114,7 +113,6 @@ int main(void)
     }
     else {
       char *usrcmd;
-      char *dirPath;
       /*
        * Remove leading and trailing whitespace from the line
        * Then, if there is anything left, add it to the history list
@@ -138,16 +136,29 @@ int main(void)
           else {
             chdir(getenv("HOME"));
           }
-          dirPath = getcwd(dirPath, 100);
-          printf("%s\n", dirPath);
+          continue;
         }
+
         else {
+          Pgm *nextPgm;
+          nextPgm = cmd.pgm;
 
-          execNextPgm(cmd.pgm);
+          pid = fork();
+          if (pid < 0) {
+            printf("Fork error. Exiting...");
+            exit(1);
+          }
 
-          if (!cmd.background) {
-            if (waitpid(pid, &status, 0) != pid) {
-              printf("%i\n", status);
+          /* Child process */
+          else if (pid == 0) {
+            execNextPgm(nextPgm);
+          }
+
+          /* Parent process */
+          else {
+            if (!cmd.background) {
+              if (waitpid(pid, &status, 0) != pid) {
+              }
             }
           }
         }
