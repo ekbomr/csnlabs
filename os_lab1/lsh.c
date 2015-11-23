@@ -147,7 +147,11 @@ int main(void){
 void execNextPgm (Pgm *nextPgm) {
   /* Base case */
   if (nextPgm->next == NULL) {
-    execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
+
+    if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
+      perror("Error");
+      exit(EXIT_FAILURE);
+    }
   }
   else {
     int pipe_fds[2];
@@ -167,7 +171,6 @@ void execNextPgm (Pgm *nextPgm) {
     else if (pid == 0) {
       dup2(write_fd, STDOUT_FILENO);
       close(write_fd);
-      //close(write_fd);
       /* Point to next program and execute recursively */
       nextPgm = nextPgm->next;
       execNextPgm(nextPgm);
@@ -182,8 +185,10 @@ void execNextPgm (Pgm *nextPgm) {
         printf("Wait status message: %i\n", status);
       }
 
-      execvp(nextPgm->pgmlist[0], nextPgm->pgmlist);
-
+      if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
+        printf("an error: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+      }
     }
   }
 }
