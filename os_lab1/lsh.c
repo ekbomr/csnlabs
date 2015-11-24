@@ -124,7 +124,6 @@ int main(void){
             }
 
             if (cmd.background) {
-              //close(STDIN_FILENO);
               /* Change process group to prevent SIGINT kill bg process */
               setpgid(pid, 0);
             }
@@ -138,6 +137,7 @@ int main(void){
             sigaction(SIGCHLD, &sigchld_action, NULL);
 
             if (!cmd.background) {
+              printf("WAITING........");
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait error: %s\n", strerror(errno));
               }
@@ -218,6 +218,7 @@ void clean_up_child_process (int signal_number){
 
 /* Intercept SIGINT for the parent to keep the shell from terminating */
 void handle_sigint (int signal_number){
+  printf("SIG CAUGHT...");
   /* Do nothing */
 }
 
