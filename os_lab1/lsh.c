@@ -33,7 +33,6 @@
 int done = 0;
 
 pid_t pid;
-int backgroundExec;
 int status;
 sig_atomic_t child_exit_status;
 struct sigaction sigchld_action, sigint_action;
@@ -58,8 +57,6 @@ int main(void){
   memset(&sigint_action, 0, sizeof (sigint_action));
   sigchld_action.sa_handler = &clean_up_child_process;
   sigint_action.sa_handler = &handle_sigint;
-  sigaction(SIGCHLD, &sigchld_action, NULL);
-  sigaction(SIGINT, &sigint_action, NULL);
 
   while (!done) {
     char *line;
@@ -103,8 +100,6 @@ int main(void){
           Pgm *nextPgm;
           nextPgm = cmd.pgm;
 
-          backgroundExec = cmd.background;
-
           pid = fork();
           if (pid < 0) {
             printf("Fork error: %s\n", strerror(errno));
@@ -135,6 +130,9 @@ int main(void){
 
           /* Parent process code */
           else {
+            sigaction(SIGCHLD, &sigchld_action, NULL);
+            sigaction(SIGINT, &sigint_action, NULL);
+
             if (!cmd.background) {
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait error: %s\n", strerror(errno));
@@ -214,12 +212,9 @@ void clean_up_child_process (int signal_number){
   child_exit_status = status;
 }
 
-/* Kill child if ctrl+C */
+/* Intercept SIGINT for the parent to keep the shell from terminating */
 void handle_sigint (int signal_number){
-  if (!backgroundExec){
-    printf("Ctrl+C detected. Terminating...\n");
-    kill(pid, SIGINT);
-  }
+  /* Do nothing */
 }
 
 /*
