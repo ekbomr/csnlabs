@@ -89,9 +89,11 @@ int main(void){
           return 0;
         }
         else if (strcmp(usrcmd, "cd") == 0) {
+          /* If path arg given to cd, navigate there */
           if (cmd.pgm->pgmlist[1]) {
             chdir(cmd.pgm->pgmlist[1]);
           }
+          /* Else, cd to home dir */
           else {
             chdir(getenv("HOME"));
           }
@@ -107,7 +109,7 @@ int main(void){
             printf("Fork error: %s\n", strerror(errno));
           }
 
-          /* Child process */
+          /* Child process code */
           else if (pid == 0) {
             /* Redirect input/output if *file* > *cmd* */
             if (cmd.rstdin != NULL) {
@@ -122,12 +124,12 @@ int main(void){
             }
             if (cmd.background) {
               close(STDIN_FILENO);
-              close(STDOUT_FILENO);
+              //close(STDOUT_FILENO);
             }
             execNextPgm(nextPgm);
           }
 
-          /* Parent process */
+          /* Parent process code */
           else {
             if (!cmd.background) {
               if (waitpid(pid, &status, 0) != pid) {
@@ -146,16 +148,19 @@ int main(void){
   return 0;
 }
 
+
+/* execNextPgm: Recursively executes multiple programs */
 void execNextPgm (Pgm *nextPgm) {
   /* Base case */
   if (nextPgm->next == NULL) {
-
     if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
       printf("Exec error: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     }
   }
+
   else {
+    /* Declare and init pipe */
     int pipe_fds[2];
     int read_fd;
     int write_fd;
@@ -168,8 +173,9 @@ void execNextPgm (Pgm *nextPgm) {
       printf("Fork error: %s\n", strerror(errno));
     }
 
-    /* (Grand)child process */
+    /* (Grand)child process code */
     else if (pid == 0) {
+      /* Redirect output to pipe before executing */
       dup2(write_fd, STDOUT_FILENO);
       close(write_fd);
       close(read_fd);
@@ -178,15 +184,16 @@ void execNextPgm (Pgm *nextPgm) {
       execNextPgm(nextPgm);
     }
 
-    /* Parent process */
+    /* Parent process code */
     else {
+      /* Redirect input to pipe before waiting for child */
       dup2(read_fd, STDIN_FILENO);
       close(read_fd);
       close(write_fd);
       if (waitpid(pid, &status, 0) != pid) {
         printf("Wait status message: %i\n", status);
       }
-
+      /* Execute after waiting to get input from child */
       if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
         printf("Exec error: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -195,14 +202,15 @@ void execNextPgm (Pgm *nextPgm) {
   }
 }
 
+/* Clean up the child process. */
 void clean_up_child_process (int signal_number){
-  /* Clean up the child process. */
   int status;
   wait(&status);
   /* Store its exit status in a global variable. */
   child_exit_status = status;
 }
 
+/* Kill child if ctrl+C */
 void handle_sigint (int signal_number){
   printf("Ctrl+C detected. Terminating...\n");
   kill(pid, SIGINT);
