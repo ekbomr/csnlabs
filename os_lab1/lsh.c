@@ -118,14 +118,17 @@ int main(void){
               read_fd = open(cmd.rstdin, O_RDONLY);
               dup2(read_fd, STDIN_FILENO);
             }
+
             if (cmd.rstdout != NULL) {
               int write_fd;
               write_fd = open(cmd.rstdout, O_TRUNC | O_CREAT | O_WRONLY);
               dup2(write_fd, STDOUT_FILENO);
             }
+
             if (cmd.background) {
               close(STDIN_FILENO);
-              /* close(STDOUT_FILENO); */
+              /* Change process group to prevent SIGINT kill bg process */
+              setpgid(pid, 0);
             }
             execNextPgm(nextPgm);
           }
@@ -136,9 +139,6 @@ int main(void){
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait error: %s\n", strerror(errno));
               }
-            }
-            else {
-              setpgid(pid, 0);
             }
           }
         }
