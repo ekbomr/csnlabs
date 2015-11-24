@@ -53,14 +53,17 @@ int main(void){
   Command cmd;
   int n;
   /* Handle the termination of a child process */
-  memset(&sigchld_action, 0, sizeof (sigchld_action));
   memset(&sigint_action, 0, sizeof (sigint_action));
-  sigchld_action.sa_handler = &clean_up_child_process;
   sigint_action.sa_handler = &handle_sigint;
+  sigaction(SIGINT, &sigint_action, NULL);
 
   while (!done) {
+    char buf[1024];
     char *line;
-    line = readline("> ");
+    getcwd(buf, sizeof(buf));
+    strcat(buf, " > ");
+
+    line = readline(buf);
 
     if (!line) {
       /* Encountered EOF at top level */
@@ -130,8 +133,9 @@ int main(void){
 
           /* Parent process code */
           else {
+            memset(&sigchld_action, 0, sizeof (sigchld_action));
+            sigchld_action.sa_handler = &clean_up_child_process;
             sigaction(SIGCHLD, &sigchld_action, NULL);
-            sigaction(SIGINT, &sigint_action, NULL);
 
             if (!cmd.background) {
               if (waitpid(pid, &status, 0) != pid) {
