@@ -104,8 +104,7 @@ int main(void){
 
           pid = fork();
           if (pid < 0) {
-            printf("Fork error. Exiting...");
-            exit(1);
+            printf("Fork error: %s\n", strerror(errno));
           }
 
           /* Child process */
@@ -120,9 +119,11 @@ int main(void){
               int write_fd;
               write_fd = open(cmd.rstdout, O_TRUNC | O_CREAT | O_WRONLY);
               dup2(write_fd, STDOUT_FILENO);
-              //close(write_fd);
             }
-
+            if (cmd.background) {
+              close(STDIN_FILENO);
+              close(STDOUT_FILENO);
+            }
             execNextPgm(nextPgm);
           }
 
@@ -130,6 +131,7 @@ int main(void){
           else {
             if (!cmd.background) {
               if (waitpid(pid, &status, 0) != pid) {
+                printf("Wait error: %s\n", strerror(errno));
               }
             }
           }
@@ -149,7 +151,7 @@ void execNextPgm (Pgm *nextPgm) {
   if (nextPgm->next == NULL) {
 
     if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
-      perror("Error");
+      printf("Exec error: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     }
   }
@@ -163,14 +165,14 @@ void execNextPgm (Pgm *nextPgm) {
 
     pid = fork();
     if (pid < 0) {
-      printf("Fork error. Exiting...");
-      exit(1);
+      printf("Fork error: %s\n", strerror(errno));
     }
 
     /* (Grand)child process */
     else if (pid == 0) {
       dup2(write_fd, STDOUT_FILENO);
       close(write_fd);
+      close(read_fd);
       /* Point to next program and execute recursively */
       nextPgm = nextPgm->next;
       execNextPgm(nextPgm);
@@ -186,7 +188,7 @@ void execNextPgm (Pgm *nextPgm) {
       }
 
       if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
-        printf("an error: %s\n", strerror(errno));
+        printf("Exec error: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
       }
     }
