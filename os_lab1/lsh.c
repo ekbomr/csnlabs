@@ -29,13 +29,12 @@
  #include <errno.h>
  #include <fcntl.h>
 
-/* Need (at least) system calls: fork, exec, wait, stat, signal, pipe, dup */
-
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
-pid_t pid;
-int status;
 
+pid_t pid;
+int backgroundExec;
+int status;
 sig_atomic_t child_exit_status;
 struct sigaction sigchld_action, sigint_action;
 
@@ -104,6 +103,8 @@ int main(void){
           Pgm *nextPgm;
           nextPgm = cmd.pgm;
 
+          backgroundExec = cmd.background;
+
           pid = fork();
           if (pid < 0) {
             printf("Fork error: %s\n", strerror(errno));
@@ -135,6 +136,9 @@ int main(void){
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait error: %s\n", strerror(errno));
               }
+            }
+            else {
+              setpgid(pid, 0);
             }
           }
         }
@@ -212,8 +216,10 @@ void clean_up_child_process (int signal_number){
 
 /* Kill child if ctrl+C */
 void handle_sigint (int signal_number){
-  printf("Ctrl+C detected. Terminating...\n");
-  kill(pid, SIGINT);
+  if (!backgroundExec){
+    printf("Ctrl+C detected. Terminating...\n");
+    kill(pid, SIGINT);
+  }
 }
 
 /*
