@@ -124,7 +124,7 @@ int main(void){
             }
             if (cmd.background) {
               close(STDIN_FILENO);
-              //close(STDOUT_FILENO);
+              /* close(STDOUT_FILENO); */
             }
             execNextPgm(nextPgm);
           }
@@ -154,7 +154,7 @@ void execNextPgm (Pgm *nextPgm) {
   /* Base case */
   if (nextPgm->next == NULL) {
     if(execvp(nextPgm->pgmlist[0], nextPgm->pgmlist) < 0){
-      printf("Exec error: %s\n", strerror(errno));
+      perror("Exec error");
       exit(EXIT_FAILURE);
     }
   }
