@@ -124,7 +124,7 @@ int main(void){
             }
 
             if (cmd.background) {
-              close(STDIN_FILENO);
+              //close(STDIN_FILENO);
               /* Change process group to prevent SIGINT kill bg process */
               setpgid(pid, 0);
             }
