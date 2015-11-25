@@ -140,15 +140,12 @@ def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
         if leaderFound:
           if mycontext['myIP'] != candidateIPaddr:
             sendCandidateID(leaderFound)
-            print "Found leader, turning of listener"
-            print "sending final msg"
 
           stopcomm(thiscommhandle)
           stopcomm(listencommhandle)
           start_board()
 
         elif mycontext['myIP'] == candidateIPaddr:
-          print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
           leaderFound = True
           sendCandidateID(leaderFound)
 
