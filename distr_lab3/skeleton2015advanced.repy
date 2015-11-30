@@ -1,0 +1,218 @@
+# FEEL FREE TO CHANGE THE CODE.
+# This is just a dull example
+
+# ------------------------------------------------------------------------------
+# Start listening and handle incoming connections in board() function
+# ------------------------------------------------------------------------------
+def start_board():
+  ip = mycontext['myIP']
+  port = mycontext['myPort']
+  print "Listening on IP " + str(ip) +" port " + str(port)
+  try:
+    listencommhandle = waitforconn(ip,port,board)
+  except Exception, e:
+    print ("Exception in start_board: %s, %s\n" %(type(e), e))
+    raise
+
+def start_election():
+  ip = mycontext['myIP']
+  port = mycontext['myPort']
+  settimer(5, sendCandidateID, [False])
+  try:
+    listenToPrevNeighbor = waitforconn(ip, port, elect_leader)
+  except Exception, e:
+    print ("Exception in start_election: %s, %s\n" %(type(e), e))
+    raise
+
+# ------------------------------------------------------------------------------
+# Called when an incoming message is received.
+# ------------------------------------------------------------------------------
+def board(ip, port, sockobj, thiscommhandle, listencommhandle):
+  try:
+    msgheader = sockobj.recv(1024) # Receive message,
+    # React depending on message type: HTTP GET or POST, or some other type of communication.
+    if msgheader.startswith( 'GET' ):
+      refresh_page(sockobj)
+      stopcomm(thiscommhandle)
+
+    elif msgheader.startswith('POST'):
+      if mycontext['myIP'] == mycontext['leader'][0]:
+
+        mycontext['lock'].acquire()
+        print 'got POST for LEADER'
+        msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
+        for ipaddr in mycontext['ipList']:
+          if not mycontext['myIP'] == ipaddr.rstrip():
+            socketobject = openconn(ipaddr, mycontext['myPort'])
+            socketobject.send(msg)
+
+        mycontext['lock'].release()
+        addMessageToBoard(msgheader)
+        refresh_page(sockobj)
+        stopcomm(thiscommhandle)
+
+      else:
+        socketobject = openconn(mycontext['leader'][0], mycontext['myPort'])
+        socketobject.send(msgheader)
+
+        refresh_page(sockobj)
+        stopcomm(thiscommhandle)
+
+    #Receive a board update from the posting vessel
+    elif msgheader.startswith('BOARD_UPDATE'):
+      print "got BOARD_UPDATE:\n"
+      addMessageToBoard(msgheader)
+      stopcomm(thiscommhandle)
+
+    else:
+      print "got something:\n", msgheader
+      stopcomm(thiscommhandle)
+
+  except Exception, e:
+    print "Exception in board: %s, %s\n" %(type(e), e)
+    raise
+
+# Takes the recieved message and adds it to the list of board messages.
+def addMessageToBoard(msgheader):
+  msg = msgheader[msgheader.find('comment') + 8: ]
+  mycontext['boardMessages'].insert(0, msg)
+
+# Refreshes the page and sends an acknowledgement to the browser
+def refresh_page(sockobj):
+  htmlresponse = generate_html_page()
+  sockobj.send("HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
+  "Content-length: %i\r\n\r\n%s" % (len(htmlresponse), htmlresponse))
+
+# ------------------------------------------------------------------------------
+# Outputs the blackboard html
+# ------------------------------------------------------------------------------
+def generate_html_page():
+  entry = ""
+  if mycontext['boardMessages'] == []:
+    entry = "Empty..."
+  else:
+    for message in mycontext['boardMessages']:
+      entry += message + '<br>'
+
+  content ='<div class="entry">%s</div>' %( entry )
+  # dynamic title showing Ip address, port and up time.
+  board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['myIP'], mycontext['myPort'], int(getruntime()))
+  # merging the contents of the board with the title
+  # and wrapping all with <div id="boardcontents_placeholder”>...</div>
+  leader = '<div><p>The leader is: %s with ID: %f</p></div>' %(mycontext['leader'][0], mycontext['leader'][1])
+
+  content = '<div id="boardcontents_placeholder">%s%s</div>%s' %(board_title, content, leader)
+  #Concatenate strings into huge string representing the final html
+  content = "".join([mycontext['headerhtml'], content, mycontext['footerhtml']])
+  return content
+
+def sendCandidateID(leaderFound):
+  try:
+    msg = mycontext['leader'][0] + ': ' + str(mycontext['leader'][1])
+    if leaderFound:
+      msg = "LEADER_FOUND" + msg
+    else:
+      msg = "ELECTION" + msg
+
+    neighborConnection = openconn(mycontext['myNeighbor'], port)
+    neighborConnection.send(msg)
+    neighborConnection.close()
+
+  except Exception, e:
+    print "Exception in sendCandidateID: %s, %s\n" %(type(e), e)
+    raise
+
+def elect_leader(ip, port, sockobj, thiscommhandle, listencommhandle):
+  try:
+    msg = sockobj.recv(1024) # Receive message,
+    if msg.startswith("LEADER_FOUND") or msg.startswith("ELECTION"):
+      if msg.startswith("LEADER_FOUND"):
+        msg = msg[12:]
+        leaderFound = True
+      else:
+        msg = msg[8:]
+        leaderFound = False
+
+      candidateID = float(msg[msg.find(':') + 1: ].rstrip())
+      candidateIPaddr = msg[: msg.find(':')]
+
+      if floatIsEqual(mycontext['leader'][1], candidateID):
+        if leaderFound:
+          if mycontext['myIP'] != candidateIPaddr:
+            sendCandidateID(leaderFound)
+            print "Found leader, turning of listener"
+            print "sending final msg"
+
+          stopcomm(thiscommhandle)
+          stopcomm(listencommhandle)
+          start_board()
+
+        elif mycontext['myIP'] == candidateIPaddr:
+          print("I'm the leader! IP: %s ID: %f" %(mycontext['leader'][0], mycontext['leader'][1]))
+          leaderFound = True
+          sendCandidateID(leaderFound)
+
+      elif mycontext['leader'][1] > candidateID:
+        mycontext['leader'] = (candidateIPaddr, candidateID)
+        sendCandidateID(leaderFound)
+
+  except Exception, e:
+    print "Exception in elect_leader: %s, %s\n" %(type(e), e)
+    raise
+
+def floatIsEqual(leader, candidate):
+  return abs(leader - candidate) <= 0.0000001
+
+def initiateRing(myIP):
+  ipFile = open('iplist.txt', 'r')
+  mycontext['ipList'] = ipFile.readlines()
+  ipList = mycontext['ipList']
+  ipFile.close()
+
+  for index in range(len(ipList)):
+    if index == (len(ipList) - 1):
+      mycontext['myNeighbor'] = ipList[0].rstrip()
+    elif myIP == ipList[index].rstrip():
+      mycontext['myNeighbor'] = ipList[index + 1].rstrip()
+      break
+
+
+# ------------------------------------------------------------------------------
+# Main entry point of the program. Initalizes global variables in mycontext
+# and calls start_board() which opens the socket for incoming connections.
+# ------------------------------------------------------------------------------
+if callfunc == 'initialize':
+  # Running remotely (assuming that we pass one input argument only when we run remotely):
+  # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
+  if len(callargs) == 1:
+    port = int(callargs[0])
+    ip = getmyip()
+
+    mycontext['myNeighbor'] = ""
+    initiateRing(ip)
+    print "my IP: " + ip + ", neighborIP: " + mycontext['myNeighbor']
+
+  # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
+  # If you start multiple local instances using different ports, you can debug and test your code locally
+  # example:
+  # python ../demokit/repy.py ../demokit/restrictions.default skeleton2015advanced.repy 127.0.0.1 63100
+  elif len(callargs) == 2:
+    port = int(callargs[1])
+    ip = callargs[0]
+
+  # Fail if we don't have 1 or 2 arguments
+  else:
+    raise Exception("Specify a port only for auto detection of IP, or specify IP and port")
+  #Initialize Port and IP
+  mycontext['myPort'] = port
+  mycontext['myIP'] = ip
+  #read header and footer html files
+  mycontext['headerhtml'] = file("header.html").read()
+  mycontext['footerhtml'] = file("footer.html").read()
+
+  mycontext['boardMessages'] = []
+  mycontext['leader'] = (ip, randomfloat())
+  #print "my ID: " + str(mycontext['leader'][1])
+  mycontext['lock'] = getlock()
+
+  start_election()
