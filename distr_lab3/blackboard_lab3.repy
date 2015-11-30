@@ -17,7 +17,7 @@ def start_board():
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
 # ------------------------------------------------------------------------------
-def board(ip, port, sockobj, thiscommhandle, listencommhandle):
+def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
   try:
     msgheader = sockobj.recv(1024) # Receive message,
     # React depending on message type: HTTP GET or POST, or some other type of communication.
@@ -27,20 +27,17 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 
     elif msgheader.startswith( 'POST' ):
       print "got POST:\n", msgheader
-      msg = 'BOARD_UPDATE' + msgheader[msgheader.find('POST') + 4: ]
+      msg = msgheader[:msgheader.find('comment')] + 'SEQ' + str(mycontext['seqNumber'] + 1) + msgheader[msgheader.find('comment'): ]
+      msg = 'BOARD_UPDATE' + msg
 
-      #If running locally
-      # TODO: Move this - "bad modularization"
-      if len(callargs) == 2:
-        socketobject = openconn('127.0.0.1', 63101)
-        socketobject.send(msg)
-      else:
-        vesselIPs = mycontext['iplist']
-        for ipaddr in vesselIPs:
-          if not ipaddr == mycontext['myIP']:
-            socketobject = openconn(ipaddr, mycontext['myPort'])
-            socketobject.send(msg)
+      mycontext['lock'].acquire()
+      vesselIPs = mycontext['iplist']
+      for ipaddr in vesselIPs:
+        if not ipaddr == mycontext['myIP']:
+          socketobject = openconn(ipaddr, mycontext['myPort'])
+          socketobject.send(msg)
 
+      mycontext['lock'].release()
       addMessageToBoard(msgheader)
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
@@ -48,6 +45,20 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     #Receive a board update from the posting vessel
     elif msgheader.startswith('BOARD_UPDATE'):
       print "got BOARD_UPDATE:\n", msgheader
+
+      seqNumber = msgheader[msgheader.find('SEQ:') + 4 : msgheader.find('comment')]
+      if seqNumber > mycontext['seqNumber']:
+         mycontext['seqNumber'] += 1
+
+      for index in range(len(mycontext['boardMessages'])):
+        if index == len(mycontext['boardMessages']):
+          mycontext['boardMessages'].insert(index, (seqNumber, remoteIP, msg)
+
+        elif seqNumber == mycontext['boardMessages'][index][0]:
+          if not compareIPaddresses(mycontext['boardMessages'][index][1], remoteIP):
+            mycontext['boardMessages'].insert(index, (seqNumber, remoteIP, msg)
+            break
+
       addMessageToBoard(msgheader)
       stopcomm(thiscommhandle)
 
@@ -59,8 +70,24 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
 
+#return true if ip1 is greater than ip2
+def compareIPaddresses(ip1, ip2):
+  ip1list = ip1.split('.')
+  ip2list = ip2.split('.')
+
+  ip11 = ""
+  for octet in ip1list:
+    ip11 = ip11 + octet
+
+  ip22 = ""
+  for octet in ip2list:
+    ip22 = ip22 + octet
+
+  return int(ip11) > int(ip22)
+
 # Takes the recieved message and adds it to the list of board messages.
 def addMessageToBoard(msgheader):
+
   msg = msgheader[msgheader.find('comment') + 8: ]
   mycontext['boardMessages'].insert(0, msg)
 
@@ -128,6 +155,9 @@ if callfunc == 'initialize':
   mycontext['headerhtml'] = file("header.html").read()
   mycontext['footerhtml'] = file("footer.html").read()
 
+  mycontext['lock'] = getlock()
+
   mycontext['boardMessages'] = []
+  mycontext['seqNumber'] = 0
 
   start_board()
