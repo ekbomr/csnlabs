@@ -47,9 +47,12 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
       print "got BOARD_UPDATE:\n", msgheader
 
       seqNumber = msgheader[msgheader.find('SEQ:') + 4 : msgheader.find('comment')]
+
+      # Increment sequence number
       if seqNumber > mycontext['seqNumber']:
          mycontext['seqNumber'] += 1
 
+      
       for index in range(len(mycontext['boardMessages'])):
         if index == len(mycontext['boardMessages']):
           mycontext['boardMessages'].insert(index, (seqNumber, remoteIP, msg)
@@ -70,9 +73,10 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
 
-#return true if ip1 is greater than ip2
+# Returns True if ip1 is greater than ip2
 def compareIPaddresses(ip1, ip2):
 
+  # Helper function to convert IP to int
   def ipToInt(ipaddr):
     ipInt = ''
     for octet in ipaddr.split('.'):
@@ -144,6 +148,7 @@ if callfunc == 'initialize':
   # Fail if we don't have 1 or 2 arguments
   else:
     raise Exception("Specify a port only for auto detection of IP, or specify IP and port")
+
   #Initialize Port and IP
   mycontext['myPort'] = port
   mycontext['myIP'] = ip
@@ -152,8 +157,7 @@ if callfunc == 'initialize':
   mycontext['footerhtml'] = file("footer.html").read()
 
   mycontext['lock'] = getlock()
-
-  mycontext['boardMessages'] = []
+  mycontext['boardMessages'] = {}
   mycontext['seqNumber'] = 0
 
   start_board()
