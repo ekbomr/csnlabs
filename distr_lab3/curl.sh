@@ -17,7 +17,7 @@ done
 ELEMENTS=${#ARRAY[@]}
 
 # echo each element in array
-for (( i=0;i<$ELEMENTS;i++)); do
+for (( i=$ELEMENTS-1;i>=0;i--)); do
 
   curl -g --request POST ${ARRAY[${i}]}':63117' --data "comment=hej1"
   #curl --data "comment=hej1" ${ARRAY[${i}]}:63117

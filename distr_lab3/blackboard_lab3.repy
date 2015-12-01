@@ -26,7 +26,7 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
       stopcomm(thiscommhandle)
 
     elif msgheader.startswith( 'POST' ):
-      print "got POST:\n", msgheader
+      #print "got POST:\n", msgheader
       mycontext['seqNumber'] += 1
       msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
       msg = 'BOARD_UPDATE' + msg
@@ -37,19 +37,22 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
         if not ipaddr == mycontext['myIP']:
           socketobject = openconn(ipaddr, mycontext['myPort'])
           socketobject.send(msg)
+          socketobject.close()
 
       mycontext['lock'].release()
-      addMessageToBoard(msgheader, mycontext['seqNumber'], remoteIP)
+      #print "I'm POSTing and the remoteIP is: %s" %(remoteIP)
+      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
     #Receive a board update from the posting vessel
     elif msgheader.startswith('BOARD_UPDATE'):
-      print "got BOARD_UPDATE:\n", msgheader
-      seqNumber = int(msgheader[msgheader.find('SEQ: ') + 4 : msgheader.find('comment')])
 
-      addMessageToBoard(msgheader, seqNumber, remoteIP)
       stopcomm(thiscommhandle)
+      mycontext['lock'].acquire()
+      seqNumber = int(msgheader[msgheader.find('SEQ: ') + 4 : msgheader.find('comment')])
+      addMessageToBoard(msgheader, seqNumber, remoteIP)
+      mycontext['lock'].release()
 
     else:
       print "got something:\n", msgheader
@@ -61,9 +64,12 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
 
 # Returns True if ip1 is greater than ip2
 def compareIPaddresses(ip1, ip2):
-  if ip1 == ip2:
+  ip1int = ipToInt(ip1)
+  ip2int = ipToInt(ip2)
+
+  if ip1int == ip2int:
     return 0
-  elif ip1 > ip2:
+  elif ip1int > ip2int:
     return 1
   else:
     return -1
@@ -87,11 +93,11 @@ def addMessageToBoard(msgheader, seqNumber, remoteIP):
 
   boardMessages = mycontext['boardMessages']
   if seqNumber in boardMessages:
-    boardMessages[seqNumber].append((ipToInt(remoteIP), msg))
+    boardMessages[seqNumber].append((remoteIP, msg))
     boardMessages[seqNumber].sort(boardMessages[seqNumber], compareIPaddresses(), key = getKey())
 
   else:
-    boardMessages[seqNumber] = [(ipToInt(remoteIP), msg)]
+    boardMessages[seqNumber] = [(remoteIP, msg)]
 
 # Refreshes the page and sends an acknowledgement to the browser
 def refresh_page(sockobj):
@@ -112,9 +118,8 @@ def generate_html_page():
     msgKeys.sort(reverse = True)
     for seqNumber in msgKeys:
       if not boardMessages[seqNumber] == []:
-        print boardMessages[seqNumber]
         for msg in boardMessages[seqNumber]:
-          entry += '%s IP: %i <br>' %(msg[1], msg[0])
+          entry += '%s IP: %s SEQ#: %i <br>' %(msg[1], msg[0], seqNumber)
 
   content ='<div class="entry">%s</div>' %( entry )
   # dynamic title showing Ip address, port and up time.
