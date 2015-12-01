@@ -1,6 +1,3 @@
-# FEEL FREE TO CHANGE THE CODE.
-# This is just a dull example
-
 # ------------------------------------------------------------------------------
 # Start listening and handle incoming connections in board() function
 # ------------------------------------------------------------------------------
@@ -59,7 +56,7 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
 
-# Returns True if ip1 is greater than ip2
+# Helper function for use in sort()
 def compareIPaddresses(ip1, ip2):
   if ip1 == ip2:
     return 0
@@ -75,17 +72,20 @@ def ipToInt(ipaddr):
     ipInt += octet
   return int(ipInt)
 
+# "key" function for sort()
 def getKey(msgTuple):
   return msgTuple[0]
 
-# Takes the recieved message and adds it to the list of board messages.
+# Takes the recieved message and adds it to dict/list of board messages.
 def addMessageToBoard(msgheader, seqNumber, remoteIP):
   msg = msgheader[msgheader.find('comment') + 8: ]
+  boardMessages = mycontext['boardMessages']
+
   # Increment sequence number
   if seqNumber > mycontext['seqNumber']:
      mycontext['seqNumber'] += 1
 
-  boardMessages = mycontext['boardMessages']
+  # If duplicate sequence number, add to a list and sort by IP to break ties
   if seqNumber in boardMessages:
     boardMessages[seqNumber].append((ipToInt(remoteIP), msg))
     boardMessages[seqNumber].sort(boardMessages[seqNumber], compareIPaddresses(), key = getKey())
@@ -110,9 +110,10 @@ def generate_html_page():
   else:
     msgKeys = boardMessages.keys()
     msgKeys.sort(reverse = True)
+
+    # Iterate over the sorted keys, to get msgs in correct order
     for seqNumber in msgKeys:
       if not boardMessages[seqNumber] == []:
-        print boardMessages[seqNumber]
         for msg in boardMessages[seqNumber]:
           entry += '%s IP: %i <br>' %(msg[1], msg[0])
 
