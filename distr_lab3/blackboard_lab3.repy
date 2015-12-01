@@ -72,18 +72,14 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
 
 #return true if ip1 is greater than ip2
 def compareIPaddresses(ip1, ip2):
-  ip1list = ip1.split('.')
-  ip2list = ip2.split('.')
 
-  ip11 = ""
-  for octet in ip1list:
-    ip11 = ip11 + octet
+  def ipToInt(ipaddr):
+    ipInt = ''
+    for octet in ipaddr.split('.'):
+      ipInt += octet
+    return int(ipInt)
 
-  ip22 = ""
-  for octet in ip2list:
-    ip22 = ip22 + octet
-
-  return int(ip11) > int(ip22)
+  return ipToInt(ip1) > ipToInt(ip22)
 
 # Takes the recieved message and adds it to the list of board messages.
 def addMessageToBoard(msgheader):
