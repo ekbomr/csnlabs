@@ -19,7 +19,6 @@ def start_board():
 # ------------------------------------------------------------------------------
 def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
   try:
-    print "board started"
     msgheader = sockobj.recv(1024) # Receive message,
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
@@ -29,7 +28,7 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST' ):
       print "got POST:\n", msgheader
       mycontext['seqNumber'] += 1
-      msg = msgheader[:msgheader.find('comment')] + 'SEQ' + str(mycontext['seqNumber']) + msgheader[msgheader.find('comment'): ]
+      msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
       msg = 'BOARD_UPDATE' + msg
 
       mycontext['lock'].acquire()
@@ -40,17 +39,16 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
           socketobject.send(msg)
 
       mycontext['lock'].release()
-      addMessageToBoard(msgheader, mycontext['seqNumber'])
+      addMessageToBoard(msgheader, mycontext['seqNumber'], remoteIP)
       refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
     #Receive a board update from the posting vessel
     elif msgheader.startswith('BOARD_UPDATE'):
       print "got BOARD_UPDATE:\n", msgheader
+      seqNumber = int(msgheader[msgheader.find('SEQ: ') + 4 : msgheader.find('comment')])
 
-      seqNumber = msgheader[msgheader.find('SEQ:') + 4 : msgheader.find('comment')]
-
-      addMessageToBoard(msgheader, seqNumber)
+      addMessageToBoard(msgheader, seqNumber, remoteIP)
       stopcomm(thiscommhandle)
 
     else:
@@ -65,8 +63,10 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
 def compareIPaddresses(ip1, ip2):
   if ip1 == ip2:
     return 0
+  elif ip1 > ip2:
+    return 1
   else:
-    return 1 if ip1 > ip2 else -1
+    return -1
 
 # Helper function to convert IP to int
 def ipToInt(ipaddr):
@@ -75,17 +75,20 @@ def ipToInt(ipaddr):
     ipInt += octet
   return int(ipInt)
 
+def getKey(msgTuple):
+  return msgTuple[0]
+
 # Takes the recieved message and adds it to the list of board messages.
-def addMessageToBoard(msgheader, seqNumber):
+def addMessageToBoard(msgheader, seqNumber, remoteIP):
   msg = msgheader[msgheader.find('comment') + 8: ]
   # Increment sequence number
-  if int(seqNumber) > mycontext['seqNumber']:
+  if seqNumber > mycontext['seqNumber']:
      mycontext['seqNumber'] += 1
 
   boardMessages = mycontext['boardMessages']
   if seqNumber in boardMessages:
     boardMessages[seqNumber].append((ipToInt(remoteIP), msg))
-    boardMessages[seqNumber] = sorted(boardMessages[seqNumber], compareIPaddresses(), key = lambda msgTuple: msgTuple[0])
+    boardMessages[seqNumber].sort(boardMessages[seqNumber], compareIPaddresses(), key = getKey())
 
   else:
     boardMessages[seqNumber] = [(ipToInt(remoteIP), msg)]
@@ -102,14 +105,16 @@ def refresh_page(sockobj):
 def generate_html_page():
   entry = ""
   boardMessages = mycontext['boardMessages']
-  print "hej"
   if boardMessages == {}:
     entry = "Empty..."
   else:
-    for seqNumber in boardMessages.keys():
-      print seqNumber
-      for msg in boardMessages[seqNumber]:
-        entry += msg[1] + IP: + str(msg[0]) + '<br>'
+    msgKeys = boardMessages.keys()
+    msgKeys.sort(reverse = True)
+    for seqNumber in msgKeys:
+      if not boardMessages[seqNumber] == []:
+        print boardMessages[seqNumber]
+        for msg in boardMessages[seqNumber]:
+          entry += '%s IP: %i <br>' %(msg[1], msg[0])
 
   content ='<div class="entry">%s</div>' %( entry )
   # dynamic title showing Ip address, port and up time.
@@ -128,7 +133,6 @@ def generate_html_page():
 if callfunc == 'initialize':
   # Running remotely (assuming that we pass one input argument only when we run remotely):
   # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
-  print "init"
   if len(callargs) == 1:
     port = int(callargs[0])
     ip = getmyip()
@@ -157,12 +161,11 @@ if callfunc == 'initialize':
   mycontext['myPort'] = port
   mycontext['myIP'] = ip
   #read header and footer html files
-  #mycontext['headerhtml'] = file("header.html").read()
-  #mycontext['footerhtml'] = file("footer.html").read()
+  mycontext['headerhtml'] = file("header.html").read()
+  mycontext['footerhtml'] = file("footer.html").read()
 
   mycontext['lock'] = getlock()
   mycontext['boardMessages'] = {}
   mycontext['seqNumber'] = 0
 
-  print "start board"
   start_board()
