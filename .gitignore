@@ -27,3 +27,8 @@
 *.out
 *.app
 *.pyc
+
+# Custom
+*.py
+*.sw*
+iplist.txt
