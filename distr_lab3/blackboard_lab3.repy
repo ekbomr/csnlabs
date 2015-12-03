@@ -28,6 +28,9 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
       msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
       msg = 'BOARD_UPDATE' + msg
 
+      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
+      refresh_page(sockobj)
+
       mycontext['lock'].acquire()
       vesselIPs = mycontext['iplist']
       for ipaddr in vesselIPs:
@@ -37,9 +40,6 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
           socketobject.close()
 
       mycontext['lock'].release()
-      #print "I'm POSTing and the remoteIP is: %s" %(remoteIP)
-      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
-      refresh_page(sockobj)
       stopcomm(thiscommhandle)
 
     #Receive a board update from the posting vessel
@@ -57,7 +57,6 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
 
   except Exception, e:
     print "Exception in board: %s, %s\n" %(type(e), e)
-    raise
 
 # Helper function for use in sort()
 def compareIPaddresses(ip1, ip2):
@@ -93,11 +92,13 @@ def addMessageToBoard(msgheader, seqNumber, remoteIP):
 
   # If duplicate sequence number, add to a list and sort by IP to break ties
   if seqNumber in boardMessages:
-    boardMessages[seqNumber].append((remoteIP, msg))
+    #boardMessages[seqNumber].append((remoteIP, msg))
+    boardMessages[seqNumber].append((remoteIP, msg, getruntime()))
     boardMessages[seqNumber].sort(boardMessages[seqNumber], compareIPaddresses(), key = getKey())
 
   else:
-    boardMessages[seqNumber] = [(remoteIP, msg)]
+    #boardMessages[seqNumber] = [(remoteIP, msg)]
+    boardMessages[seqNumber] = [(remoteIP, msg, getruntime())]
 
 # Refreshes the page and sends an acknowledgement to the browser
 def refresh_page(sockobj):
@@ -121,7 +122,8 @@ def generate_html_page():
     for seqNumber in msgKeys:
       if not boardMessages[seqNumber] == []:
         for msg in boardMessages[seqNumber]:
-          entry += '%s IP: %s SEQ#: %i <br>' %(msg[1], msg[0], seqNumber)
+          #entry += '%s IP: %s SEQ#: %i <br>' %(msg[1], msg[0], seqNumber)
+          entry += '%s IP: %s SEQ#: %i elapsed time: %f <br>' %(msg[1], msg[0], seqNumber, msg[2])
 
   content ='<div class="entry">%s</div>' %( entry )
   # dynamic title showing Ip address, port and up time.
