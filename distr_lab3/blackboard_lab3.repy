@@ -24,14 +24,16 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
 
     elif msgheader.startswith( 'POST' ):
       #print "got POST:\n", msgheader
+      mycontext['lock'].acquire()
       mycontext['seqNumber'] += 1
       msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
       msg = 'BOARD_UPDATE' + msg
 
       addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
+      mycontext['lock'].release()
+      
       refresh_page(sockobj)
 
-      mycontext['lock'].acquire()
       vesselIPs = mycontext['iplist']
       for ipaddr in vesselIPs:
         if not ipaddr == mycontext['myIP']:
@@ -39,7 +41,6 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
           socketobject.send(msg)
           socketobject.close()
 
-      mycontext['lock'].release()
       stopcomm(thiscommhandle)
 
     #Receive a board update from the posting vessel
