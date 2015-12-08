@@ -26,12 +26,11 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
       #print "got POST:\n", msgheader
       mycontext['lock'].acquire()
       mycontext['seqNumber'] += 1
+      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
       msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
+      mycontext['lock'].release()
       msg = 'BOARD_UPDATE' + msg
 
-      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
-      mycontext['lock'].release()
-      
       refresh_page(sockobj)
 
       vesselIPs = mycontext['iplist']
@@ -47,10 +46,8 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith('BOARD_UPDATE'):
 
       stopcomm(thiscommhandle)
-      mycontext['lock'].acquire()
       seqNumber = int(msgheader[msgheader.find('SEQ: ') + 4 : msgheader.find('comment')])
       addMessageToBoard(msgheader, seqNumber, remoteIP)
-      mycontext['lock'].release()
 
     else:
       print "got something:\n", msgheader
@@ -76,7 +73,7 @@ def ipToInt(ipaddr):
   ipInt = ''
   for octet in ipaddr.split('.'):
     ipInt += octet
-  return int(ipInt)
+  return long(ipInt)
 
 # "key" function for sort()
 def getKey(msgTuple):
@@ -95,7 +92,7 @@ def addMessageToBoard(msgheader, seqNumber, remoteIP):
   if seqNumber in boardMessages:
     #boardMessages[seqNumber].append((remoteIP, msg))
     boardMessages[seqNumber].append((remoteIP, msg, getruntime()))
-    boardMessages[seqNumber].sort(boardMessages[seqNumber], compareIPaddresses(), key = getKey())
+    boardMessages[seqNumber].sort(cmp=compareIPaddresses, key=getKey)
 
   else:
     #boardMessages[seqNumber] = [(remoteIP, msg)]
