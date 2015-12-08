@@ -97,6 +97,8 @@ timer_sleep (int64_t ticks)
 
   /* Block instead of yield */
   thread_block();
+  intr_enable();
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -181,7 +183,6 @@ decr_tick_count (struct thread *thread, void *aux)
     if (thread->sleep_ticks <= 0)
     {
       thread_unblock (thread);
-      intr_enable();
     }
   }
 }
