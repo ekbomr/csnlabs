@@ -90,19 +90,13 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks)
 {
-  /* int64_t start = timer_ticks (); */
-
   thread_current()->sleep_ticks = ticks;
 
-
-  ASSERT (intr_get_level () == INTR_ON);
+  /* Temporarily disable Interrupts */
+  intr_disable();
 
   /* Block instead of yield */
   thread_block();
-
-  /* while (timer_elapsed (start) < ticks)
-    thread_yield ();
-  */
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -179,13 +173,16 @@ timer_print_stats (void)
 static void
 decr_tick_count (struct thread *thread, void *aux)
 {
-  if (thread->thread_status == THREAD_BLOCKED)
-  printf("Found a blocked thread!");
+  if (thread->status == THREAD_BLOCKED)
   {
     if (thread->sleep_ticks > 0)
       thread->sleep_ticks--;
-    else
+
+    if (thread->sleep_ticks <= 0)
+    {
       thread_unblock (thread);
+      intr_enable();
+    }
   }
 }
 
