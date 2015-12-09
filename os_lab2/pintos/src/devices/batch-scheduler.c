@@ -55,8 +55,8 @@ void init_bus(void){
 	sema_init (&lock, 1);
 	sema_init (&readWait, 3);
 	sema_init (&writeWait, 3);
-	semaphore[0] = sendWait;
-	semaphore[1] = recvWait;
+	active[0] = sendWait;
+	active[1] = recvWait;
 
 }
 
@@ -74,7 +74,7 @@ void init_bus(void){
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
-	/* Look up Pintos list for queues */
+
 }
 
 /* Normal task,  sending data to the accelerator */
@@ -120,25 +120,55 @@ void getSlot(task_t task)
 	/* "Inspiration" */
 	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
 
-	sema_down(lock);
-	if ((task->direction == SENDER) && activeSend < 3) {
-		activeSend++;
-		sema_up(lock);
-		sema_down(active[0]);
-	}
+	while (1) {
+		sema_down(lock);
 
+		if (task->direction == SENDER && activeSend < 3 && activeRecv == 0) {
+			activeSend++;
+			sema_up(lock);
+			sema_down(active[SENDER]);
+			return;
+		}
+		else {
+			/* Block until sender slot available */
+			sema_up(lock);
+			sema_down(active[SENDER]);
+		}
+
+		if (task->direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
+			activeRecv++;
+			sema_up(lock);
+			sema_down(active[RECEIVER]);
+			return;
+		}
+		else {
+			/* Block until receiver slot available */
+			sema_up(lock);
+			sema_down(active[RECEIVER]);
+		}
+
+	}
 
 }
 
 /* task processes data on the bus send/receive */
 void transferData(task_t task)
 {
-    /* "Fake" data transfer. Debug msgs... */
+  msg("Transferring data...");
+	timer_usleep(random_ulong() % 100);
 }
 
 /* task releases the slot */
 void leaveSlot(task_t task)
 {
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+	sema_down(lock);
+	if (task->direction == SENDER) {
+		activeSend--;
+		sema_up(active[SENDER])
+	}
+	else {
+		activeRecv--;
+		sema_up(active[RECEIVER])
+	}
+	sema_up(lock);
 }
