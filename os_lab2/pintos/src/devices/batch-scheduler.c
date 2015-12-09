@@ -42,14 +42,21 @@ int waitingToSend = 0;
 int waitingToRecv = 0;
 int activeSend = 0;
 int activeRecv = 0;
+struct semaphore lock;
+struct semaphore sendWait;
+struct semaphore recvWait;
+struct semaphore[2] active;
 
 /* initializes semaphores */
 void init_bus(void){
 
   random_init((unsigned int)123456789);
 
-	struct semaphore sem;
-	sema_init (&sem, 1);
+	sema_init (&lock, 1);
+	sema_init (&readWait, 3);
+	sema_init (&writeWait, 3);
+	semaphore[0] = sendWait;
+	semaphore[1] = recvWait;
 
 }
 
@@ -105,8 +112,22 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task)
 {
-	/* "Inspiration"
+	// int waitingToSend = 0;
+	// int waitingToRecv = 0;
+	// int activeSend = 0;
+	// int activeRecv = 0;
+
+	/* "Inspiration" */
 	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
+
+	sema_down(lock);
+	if ((task->direction == SENDER) && activeSend < 3) {
+		activeSend++;
+		sema_up(lock);
+		sema_down(active[0]);
+	}
+
+
 }
 
 /* task processes data on the bus send/receive */
