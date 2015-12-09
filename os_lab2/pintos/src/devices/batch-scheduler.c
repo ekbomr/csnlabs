@@ -71,10 +71,31 @@ void init_bus(void){
  *  Leave the bus (3).
  */
 
-void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
+void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
+	int tasks = num_tasks_send + num_tasks_receive + num_priority_send + num_priority_receive;
+	tid_t thread;
 
+	while (tasks != 0) {
+		if (num_tasks_send != 0) {
+			num_tasks_send--;
+			thread = thread_create("thread", NORMAL, &senderTask, void *);
+		}
+		else if (num_tasks_receive != 0) {
+			num_tasks_receive--;
+			thread = thread_create("thread", NORMAL, &receiverTask, void *);
+		}
+		else if (num_priority_send != 0) {
+			num_priority_send--;
+			thread = thread_create("thread", HIGH, &senderPriorityTask, void *);
+		}
+		else if (num_priority_receive != 0) {
+			num_priority_receive--;
+			thread = thread_create("thread", HIGH, &receiverPriorityTask, void *);
+		}
+		tasks--;
+	}
 }
 
 /* Normal task,  sending data to the accelerator */
