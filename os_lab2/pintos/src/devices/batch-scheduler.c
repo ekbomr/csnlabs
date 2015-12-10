@@ -78,7 +78,6 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
 {
 	int tasks = num_tasks_send + num_tasks_receive + num_priority_send + num_priority_receive;
 	tid_t thread;
-
 	while (tasks != 0) {
 		if (num_tasks_send != 0) {
 			num_tasks_send--;
@@ -93,6 +92,7 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
 			thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
 		}
 		else if (num_priority_receive != 0) {
+			//ASSERT (1 == 0);
 			num_priority_receive--;
 			thread = thread_create("thread", HIGH, &receiverPriorityTask, NULL);
 		}
@@ -146,30 +146,55 @@ void getSlot(task_t task)
 	while (1) {
 		sema_down(&lock);
 
+		if (task.direction == SENDER) {
+			if (activeSend < 3 && activeRecv == 0) {
+				activeSend++;
+				sema_up(&lock);
+				sema_down(active[SENDER]);
+				return;
+			}
+			else {
+				sema_up(&lock);
+				sema_down(active[SENDER]);
+			}
+		}
 
-		if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
-			activeSend++;
-			sema_up(&lock);
-			sema_down(active[SENDER]);
-			return;
-		}
 		else {
-			/* Block until sender slot available */
-			sema_up(&lock);
-			sema_down(active[SENDER]);
+			if (activeRecv < 3 && activeSend == 0) {
+				activeRecv++;
+				sema_up(&lock);
+				sema_down(active[RECEIVER]);
+				return;
+			}
+			else {
+				sema_up(&lock);
+				sema_down(active[RECEIVER]);
+			}
 		}
 
-		if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
-			activeRecv++;
-			sema_up(&lock);
-			sema_down(active[RECEIVER]);
-			return;
-		}
-		else {
-			/* Block until receiver slot available */
-			sema_up(&lock);
-			sema_down(active[RECEIVER]);
-		}
+		// if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
+		// 	activeSend++;
+		// 	sema_up(&lock);
+		// 	sema_down(active[SENDER]);
+		// 	return;
+		// }
+		// else {
+		// 	/* Block until sender slot available */
+		// 	sema_up(&lock);
+		// 	sema_down(active[SENDER]);
+		// }
+		//
+		// if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
+		// 	activeRecv++;
+		// 	sema_up(&lock);
+		// 	sema_down(active[RECEIVER]);
+		// 	return;
+		// }
+		// else {
+		// 	/* Block until receiver slot available */
+		// 	sema_up(&lock);
+		// 	sema_down(active[RECEIVER]);
+		// }
 
 	}
 
