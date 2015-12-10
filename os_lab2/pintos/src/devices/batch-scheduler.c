@@ -40,11 +40,9 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 	void leaveSlot(task_t task); /* task release the slot */
 
 /* Threads inherit mem from parent?? */
-int waitingToSend = 0;
-int waitingToRecv = 0;
 int activeSend = 0;
 int activeRecv = 0;
-struct semaphore lock;
+struct lock lock;
 struct semaphore sendWait;
 struct semaphore recvWait;
 struct semaphore* active[2];
@@ -54,7 +52,7 @@ void init_bus(void){
 
   random_init((unsigned int)123456789);
 
-	sema_init (&lock, 1);
+	lock_init (&lock);
 	sema_init (&recvWait, 3);
 	sema_init (&sendWait, 3);
 	active[0] = &sendWait;
@@ -135,8 +133,6 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task)
 {
-	// int waitingToSend = 0;
-	// int waitingToRecv = 0;
 	// int activeSend = 0;
 	// int activeRecv = 0;
 
@@ -144,30 +140,30 @@ void getSlot(task_t task)
 	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
 
 	while (1) {
-		sema_down(&lock);
+		lock_acquire(&lock);
 
 
 		if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
 			activeSend++;
-			sema_up(&lock);
+			lock_release(&lock);
 			sema_down(active[SENDER]);
 			return;
 		}
 		else {
 			/* Block until sender slot available */
-			sema_up(&lock);
+			lock_release(&lock);
 			sema_down(active[SENDER]);
 		}
 
 		if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
 			activeRecv++;
-			sema_up(&lock);
+			lock_release(&lock);
 			sema_down(active[RECEIVER]);
 			return;
 		}
 		else {
 			/* Block until receiver slot available */
-			sema_up(&lock);
+			lock_release(&lock);
 			sema_down(active[RECEIVER]);
 		}
 
@@ -177,14 +173,15 @@ void getSlot(task_t task)
 
 /* task processes data on the bus send/receive */
 void transferData() {
-  /* msg("Transferring data..."); */
+	printf("GEOUSHGESUIH\n");
+  	msg("Transferring data...");
 	timer_usleep(random_ulong() % 100);
-	/* msg("Transfer complete!"); */
+	msg("Transfer complete!");
 }
 
 /* task releases the slot */
 void leaveSlot(task_t task) {
-	sema_down(&lock);
+	lock_acquire(&lock);
 	if (task.direction == SENDER) {
 		activeSend--;
 		sema_up(active[SENDER]);
@@ -193,5 +190,5 @@ void leaveSlot(task_t task) {
 		activeRecv--;
 		sema_up(active[RECEIVER]);
 	}
-	sema_up(&lock);
+	lock_release(&lock);
 }
