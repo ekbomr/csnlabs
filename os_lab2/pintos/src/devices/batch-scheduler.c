@@ -76,52 +76,48 @@ void init_bus(void){
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
-	int tasks = num_tasks_send + num_tasks_receive + num_priority_send + num_priority_receive;
+	unsigned int i;
 	tid_t thread;
-	while (tasks != 0) {
-		if (num_tasks_send != 0) {
-			num_tasks_send--;
-			thread = thread_create("thread", NORMAL, &senderTask, NULL);
-		}
-		else if (num_tasks_receive != 0) {
-			num_tasks_receive--;
-			thread = thread_create("thread", NORMAL, &receiverTask, NULL);
-		}
-		else if (num_priority_send != 0) {
-			num_priority_send--;
-			thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
-		}
-		else if (num_priority_receive != 0) {
-			//ASSERT (1 == 0);
-			num_priority_receive--;
-			thread = thread_create("thread", HIGH, &receiverPriorityTask, NULL);
-		}
-		tasks--;
+
+	for (i = 0; i < num_tasks_send; i++) {
+		thread = thread_create("thread", NORMAL, &senderTask, NULL);
+	}
+
+	for (i = 0; i < num_tasks_receive; i++) {
+		thread = thread_create("thread", NORMAL, &receiverTask, NULL);
+	}
+
+	for (i = 0; i < num_priority_send; i++) {
+		thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
+	}
+
+	for (i = 0; i < num_priority_receive; i++) {
+		thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
 	}
 }
 
 /* Normal task,  sending data to the accelerator */
 void senderTask(void *aux UNUSED){
-        task_t task = {SENDER, NORMAL};
-        oneTask(task);
+  task_t task = {SENDER, NORMAL};
+  oneTask(task);
 }
 
 /* High priority task, sending data to the accelerator */
 void senderPriorityTask(void *aux UNUSED){
-        task_t task = {SENDER, HIGH};
-        oneTask(task);
+  task_t task = {SENDER, HIGH};
+  oneTask(task);
 }
 
 /* Normal task, reading data from the accelerator */
 void receiverTask(void *aux UNUSED){
-        task_t task = {RECEIVER, NORMAL};
-        oneTask(task);
+  task_t task = {RECEIVER, NORMAL};
+  oneTask(task);
 }
 
 /* High priority task, reading data from the accelerator */
 void receiverPriorityTask(void *aux UNUSED){
-        task_t task = {RECEIVER, HIGH};
-        oneTask(task);
+  task_t task = {RECEIVER, HIGH};
+  oneTask(task);
 }
 
 /* abstract task execution*/
@@ -131,18 +127,10 @@ void oneTask(task_t task) {
   leaveSlot(task);
 }
 
-
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task)
 {
-	// int waitingToSend = 0;
-	// int waitingToRecv = 0;
-	// int activeSend = 0;
-	// int activeRecv = 0;
-
-	/* "Inspiration" */
-	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
-
+	//printf("Getting slot...\n");
 	while (1) {
 		sema_down(&lock);
 
@@ -160,6 +148,7 @@ void getSlot(task_t task)
 		}
 
 		else {
+			//ASSERT (task.direction != SENDER);
 			if (activeRecv < 3 && activeSend == 0) {
 				activeRecv++;
 				sema_up(&lock);
@@ -171,44 +160,19 @@ void getSlot(task_t task)
 				sema_down(active[RECEIVER]);
 			}
 		}
-
-		// if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
-		// 	activeSend++;
-		// 	sema_up(&lock);
-		// 	sema_down(active[SENDER]);
-		// 	return;
-		// }
-		// else {
-		// 	/* Block until sender slot available */
-		// 	sema_up(&lock);
-		// 	sema_down(active[SENDER]);
-		// }
-		//
-		// if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
-		// 	activeRecv++;
-		// 	sema_up(&lock);
-		// 	sema_down(active[RECEIVER]);
-		// 	return;
-		// }
-		// else {
-		// 	/* Block until receiver slot available */
-		// 	sema_up(&lock);
-		// 	sema_down(active[RECEIVER]);
-		// }
-
 	}
-
 }
 
 /* task processes data on the bus send/receive */
 void transferData() {
-  /* msg("Transferring data..."); */
+  //printf("Transferring data...\n");
 	timer_usleep(random_ulong() % 100);
-	/* msg("Transfer complete!"); */
+	//printf("Transfer complete!\n");
 }
 
 /* task releases the slot */
 void leaveSlot(task_t task) {
+	//printf("Leaving slot...\n");
 	sema_down(&lock);
 	if (task.direction == SENDER) {
 		activeSend--;
