@@ -26,9 +26,11 @@ def board(remoteIP, remotePort, sockobj, thiscommhandle, listencommhandle):
       #print "got POST:\n", msgheader
       mycontext['lock'].acquire()
       mycontext['seqNumber'] += 1
-      addMessageToBoard(msgheader, mycontext['seqNumber'], mycontext['myIP'])
-      msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
+      seqNumber = mycontext['seqNumber']
       mycontext['lock'].release()
+
+      addMessageToBoard(msgheader, seqNumber, mycontext['myIP'])
+      msg = msgheader[4 :msgheader.find('comment')] + 'SEQ: ' + str(mycontext['seqNumber']) + "\n" + msgheader[msgheader.find('comment'): ]
 
       msg = 'BOARD_UPDATE' + msg
       refresh_page(sockobj)
@@ -87,8 +89,9 @@ def addMessageToBoard(msgheader, seqNumber, remoteIP):
   # Increment sequence number
   mycontext['lock'].acquire()
   if seqNumber > mycontext['seqNumber']:
-     mycontext['seqNumber'] += 1
+     mycontext['seqNumber'] = seqNumber
   mycontext['lock'].release()
+
 
   # If duplicate sequence number, add to a list and sort by IP to break ties
   if seqNumber in boardMessages:
