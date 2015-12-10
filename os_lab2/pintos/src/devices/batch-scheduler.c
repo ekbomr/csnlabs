@@ -47,7 +47,7 @@ int activeRecv = 0;
 struct semaphore lock;
 struct semaphore sendWait;
 struct semaphore recvWait;
-struct semaphore active[2];
+struct semaphore* active[2];
 
 /* initializes semaphores */
 void init_bus(void){
@@ -57,8 +57,8 @@ void init_bus(void){
 	sema_init (&lock, 1);
 	sema_init (&recvWait, 3);
 	sema_init (&sendWait, 3);
-	active[0] = sendWait;
-	active[1] = recvWait;
+	active[0] = &sendWait;
+	active[1] = &recvWait;
 
 }
 
@@ -146,28 +146,29 @@ void getSlot(task_t task)
 	while (1) {
 		sema_down(&lock);
 
+
 		if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
 			activeSend++;
 			sema_up(&lock);
-			sema_down(&active[SENDER]);
+			sema_down(active[SENDER]);
 			return;
 		}
 		else {
 			/* Block until sender slot available */
 			sema_up(&lock);
-			sema_down(&active[SENDER]);
+			sema_down(active[SENDER]);
 		}
 
 		if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
 			activeRecv++;
 			sema_up(&lock);
-			sema_down(&active[RECEIVER]);
+			sema_down(active[RECEIVER]);
 			return;
 		}
 		else {
 			/* Block until receiver slot available */
 			sema_up(&lock);
-			sema_down(&active[RECEIVER]);
+			sema_down(active[RECEIVER]);
 		}
 
 	}
@@ -186,11 +187,11 @@ void leaveSlot(task_t task) {
 	sema_down(&lock);
 	if (task.direction == SENDER) {
 		activeSend--;
-		sema_up(&active[SENDER]);
+		sema_up(active[SENDER]);
 	}
 	else {
 		activeRecv--;
-		sema_up(&active[RECEIVER]);
+		sema_up(active[RECEIVER]);
 	}
 	sema_up(&lock);
 }
