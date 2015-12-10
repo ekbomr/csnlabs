@@ -7,6 +7,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "lib/random.h" //generate random numbers
+#include "timer.h"
 
 #define BUS_CAPACITY 3
 #define SENDER 0
@@ -30,11 +31,12 @@ void senderTask(void *);
 void receiverTask(void *);
 void senderPriorityTask(void *);
 void receiverPriorityTask(void *);
+void init_bus(void);
 
 
 void oneTask(task_t task);/*Task requires to use the bus and executes methods below*/
 	void getSlot(task_t task); /* task tries to use slot on the bus */
-	void transferData(task_t task); /* task processes data on the bus either sending or receiving based on the direction*/
+	void transferData(void); /* task processes data on the bus either sending or receiving based on the direction*/
 	void leaveSlot(task_t task); /* task release the slot */
 
 /* Threads inherit mem from parent?? */
@@ -45,7 +47,7 @@ int activeRecv = 0;
 struct semaphore lock;
 struct semaphore sendWait;
 struct semaphore recvWait;
-struct semaphore[2] active;
+struct semaphore active[2];
 
 /* initializes semaphores */
 void init_bus(void){
@@ -53,8 +55,8 @@ void init_bus(void){
   random_init((unsigned int)123456789);
 
 	sema_init (&lock, 1);
-	sema_init (&readWait, 3);
-	sema_init (&writeWait, 3);
+	sema_init (&recvWait, 3);
+	sema_init (&sendWait, 3);
 	active[0] = sendWait;
 	active[1] = recvWait;
 
@@ -80,19 +82,19 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
 	while (tasks != 0) {
 		if (num_tasks_send != 0) {
 			num_tasks_send--;
-			thread = thread_create("thread", NORMAL, &senderTask, void *);
+			thread = thread_create("thread", NORMAL, &senderTask, NULL);
 		}
 		else if (num_tasks_receive != 0) {
 			num_tasks_receive--;
-			thread = thread_create("thread", NORMAL, &receiverTask, void *);
+			thread = thread_create("thread", NORMAL, &receiverTask, NULL);
 		}
 		else if (num_priority_send != 0) {
 			num_priority_send--;
-			thread = thread_create("thread", HIGH, &senderPriorityTask, void *);
+			thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
 		}
 		else if (num_priority_receive != 0) {
 			num_priority_receive--;
-			thread = thread_create("thread", HIGH, &receiverPriorityTask, void *);
+			thread = thread_create("thread", HIGH, &receiverPriorityTask, NULL);
 		}
 		tasks--;
 	}
@@ -125,7 +127,7 @@ void receiverPriorityTask(void *aux UNUSED){
 /* abstract task execution*/
 void oneTask(task_t task) {
   getSlot(task);
-  transferData(task);
+  transferData();
   leaveSlot(task);
 }
 
@@ -142,30 +144,30 @@ void getSlot(task_t task)
 	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
 
 	while (1) {
-		sema_down(lock);
+		sema_down(&lock);
 
-		if (task->direction == SENDER && activeSend < 3 && activeRecv == 0) {
+		if (task.direction == SENDER && activeSend < 3 && activeRecv == 0) {
 			activeSend++;
-			sema_up(lock);
-			sema_down(active[SENDER]);
+			sema_up(&lock);
+			sema_down(&active[SENDER]);
 			return;
 		}
 		else {
 			/* Block until sender slot available */
-			sema_up(lock);
-			sema_down(active[SENDER]);
+			sema_up(&lock);
+			sema_down(&active[SENDER]);
 		}
 
-		if (task->direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
+		if (task.direction == RECEIVER && activeRecv < 3 && activeSend == 0) {
 			activeRecv++;
-			sema_up(lock);
-			sema_down(active[RECEIVER]);
+			sema_up(&lock);
+			sema_down(&active[RECEIVER]);
 			return;
 		}
 		else {
 			/* Block until receiver slot available */
-			sema_up(lock);
-			sema_down(active[RECEIVER]);
+			sema_up(&lock);
+			sema_down(&active[RECEIVER]);
 		}
 
 	}
@@ -173,23 +175,22 @@ void getSlot(task_t task)
 }
 
 /* task processes data on the bus send/receive */
-void transferData(task_t task)
-{
-  msg("Transferring data...");
+void transferData() {
+  /* msg("Transferring data..."); */
 	timer_usleep(random_ulong() % 100);
+	/* msg("Transfer complete!"); */
 }
 
 /* task releases the slot */
-void leaveSlot(task_t task)
-{
-	sema_down(lock);
-	if (task->direction == SENDER) {
+void leaveSlot(task_t task) {
+	sema_down(&lock);
+	if (task.direction == SENDER) {
 		activeSend--;
-		sema_up(active[SENDER])
+		sema_up(&active[SENDER]);
 	}
 	else {
 		activeRecv--;
-		sema_up(active[RECEIVER])
+		sema_up(&active[RECEIVER]);
 	}
-	sema_up(lock);
+	sema_up(&lock);
 }
