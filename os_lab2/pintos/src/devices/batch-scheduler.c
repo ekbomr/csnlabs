@@ -40,23 +40,28 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 	void leaveSlot(task_t task); /* task release the slot */
 
 /* Threads inherit mem from parent?? */
-int activeSend = 0;
-int activeRecv = 0;
+int tasks = 0;
+int currDirection = 0;
+int queueSend = 0;
+int queueRecv = 0;
 struct lock lock;
-struct semaphore sendWait;
-struct semaphore recvWait;
-struct semaphore* active[2];
+struct condition waitingToSend;
+struct condition waitingToRecv;
+struct condition* waiting[2];
+int inQueue[2];
+inQueue[0] = queueSend;
+inQueue[1] = queueRecv;
 
 /* initializes semaphores */
 void init_bus(void){
 
   random_init((unsigned int)123456789);
 
-	lock_init (&lock);
-	sema_init (&recvWait, 3);
-	sema_init (&sendWait, 3);
-	active[0] = &sendWait;
-	active[1] = &recvWait;
+	lock_init(&lock);
+	cond_init(&waitingToSend);
+	cond_init(&waitingToRecv);
+	waiting[0] = &waitingToSend;
+	waiting[1] = &waitingToRecv;
 
 }
 
@@ -132,44 +137,60 @@ void getSlot(task_t task)
 	/* "Inspiration" */
 	/* http://www.cs.umd.edu/~hollings/cs412/s96/synch/eastwest.html */
 
-	//printf("Getting slot...\n");
-	while (1) {
-		lock_acquire(&lock);
+	//printf("Getting slot...");
 
-		if (task.direction == SENDER) {
-			if (activeSend < 3 && activeRecv == 0) {
-				activeSend++;
-				lock_release(&lock);
-				sema_down(active[SENDER]);
-				return;
-			}
-			else {
-				lock_release(&lock);
-				sema_down(active[SENDER]);
-			}
-		}
+	lock_acquire(&lock);
 
-		else {
-			//ASSERT (task.direction != SENDER);
-			if (activeRecv < 3 && activeSend == 0) {
-				activeRecv++;
-				lock_release(&lock);
-				sema_down(active[RECEIVER]);
-				return;
-			}
-			else {
-				lock_release(&lock);
-				sema_down(active[RECEIVER]);
-			}
-		}
+	// while no space on bus - wait...
+	while ((tasks == 3) || (tasks > 0 && currDirection != task.direction)) {
+		inQueue[task.direction]++;
+		cond_wait(waiting[task.direction], &lock);
+		inQueue[task.direction]--;
 	}
+
+	// get on the bus
+	tasks++;
+	currDirection = task.direction;
+	lock_release(&lock);
+
+	// while (1) {
+	// 	lock_acquire(&lock);
+	//
+	// 	if (task.direction == SENDER) {
+	// 		if (activeSend < 3 && activeRecv == 0) {
+	// 			activeSend++;
+	// 			lock_release(&lock);
+	// 			sema_down(active[SENDER]);
+	// 			return;
+	// 		}
+	// 		else {
+	// 			lock_release(&lock);
+	// 			sema_down(active[SENDER]);
+	// 		}
+	// 	}
+	//
+	// 	else {
+	// 		//ASSERT (task.direction != SENDER);
+	// 		if (activeRecv < 3 && activeSend == 0) {
+	// 			activeRecv++;
+	// 			lock_release(&lock);
+	// 			sema_down(active[RECEIVER]);
+	// 			return;
+	// 		}
+	// 		else {
+	// 			lock_release(&lock);
+	// 			sema_down(active[RECEIVER]);
+	// 		}
+	// 	}
+	// }
+
 }
 
 /* task processes data on the bus send/receive */
 void transferData() {
-  	printf("Transferring data...");
+  //printf("Transferring data...");
 	timer_usleep(random_ulong() % 100);
-	printf("Transfer complete!");
+	//printf("Transfer complete!");
 }
 
 /* task releases the slot */
@@ -177,11 +198,14 @@ void leaveSlot(task_t task) {
 	lock_acquire(&lock);
 	if (task.direction == SENDER) {
 		activeSend--;
+		lock_release(&lock);
 		sema_up(active[SENDER]);
+		msg("SENDER left slot...");
 	}
 	else {
 		activeRecv--;
+		lock_release(&lock);
 		sema_up(active[RECEIVER]);
+		msg("RECEIVER left slot...");
 	}
-	lock_release(&lock);
 }
