@@ -139,12 +139,12 @@ void getSlot(task_t task)
 		if (task.direction == SENDER) {
 			if (activeSend < 3 && activeRecv == 0) {
 				activeSend++;
-				sema_up(&lock);
+				lock_release(&lock);
 				sema_down(active[SENDER]);
 				return;
 			}
 			else {
-				sema_up(&lock);
+				lock_release(&lock);
 				sema_down(active[SENDER]);
 			}
 		}
@@ -153,12 +153,12 @@ void getSlot(task_t task)
 			//ASSERT (task.direction != SENDER);
 			if (activeRecv < 3 && activeSend == 0) {
 				activeRecv++;
-				sema_up(&lock);
+				lock_release(&lock);
 				sema_down(active[RECEIVER]);
 				return;
 			}
 			else {
-				sema_up(&lock);
+				lock_release(&lock);
 				sema_down(active[RECEIVER]);
 			}
 		}
@@ -167,10 +167,9 @@ void getSlot(task_t task)
 
 /* task processes data on the bus send/receive */
 void transferData() {
-	printf("GEOUSHGESUIH\n");
-  	msg("Transferring data...");
+  	printf("Transferring data...");
 	timer_usleep(random_ulong() % 100);
-	msg("Transfer complete!");
+	printf("Transfer complete!");
 }
 
 /* task releases the slot */
