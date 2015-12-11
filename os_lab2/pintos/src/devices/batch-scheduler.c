@@ -116,7 +116,7 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_tasks_receive,
 	}
 
 	for (i = 0; i < num_priority_receive; i++) {
-		thread = thread_create("thread", HIGH, &senderPriorityTask, NULL);
+		thread = thread_create("thread", HIGH, &receiverPriorityTask, NULL);
 	}
 }
 
@@ -162,7 +162,6 @@ void getSlot(task_t task) {
 			cond_wait(waitingPrio[task.direction], &lock);
 			prioQueue[task.direction]--;
 		}
-
 		else {
 			inQueue[task.direction]++;
 			cond_wait(waiting[task.direction], &lock);
@@ -173,20 +172,20 @@ void getSlot(task_t task) {
 	// get on the bus
 	tasks++;
 	currDirection = task.direction;
-
+/*
 	if (task.priority == HIGH)
 		printf("Prio");
 	else
-		printf("Normal");
+		printf("Normal");*/
 
 	lock_release(&lock);
 }
 
 /* task processes data on the bus send/receive */
-void transferData(task) {
-  	printf("TP: %i", task.priority);
-	timer_usleep(random_ulong() % 100);
-	printf("Q: %i D: %i PQ: %i", inQueue[task.direction], task.direction, queuePrio[task.direction]);
+void transferData(task_t task) {
+	timer_usleep(random_ulong() % 10000);
+  	printf("D: %i ", task.direction);
+	printf("sQ: %i rQ: %i\n", inQueue[0], inQueue[1]);
 }
 
 /* task releases the slot */
