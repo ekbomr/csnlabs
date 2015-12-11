@@ -36,7 +36,7 @@ void init_bus(void);
 
 void oneTask(task_t task);/*Task requires to use the bus and executes methods below*/
 	void getSlot(task_t task); /* task tries to use slot on the bus */
-	void transferData(void); /* task processes data on the bus either sending or receiving based on the direction*/
+	void transferData(task_t task); /* task processes data on the bus either sending or receiving based on the direction*/
 	void leaveSlot(task_t task); /* task release the slot */
 
 int tasks = 0;
@@ -129,19 +129,14 @@ void receiverPriorityTask(void *aux UNUSED){
 /* abstract task execution*/
 void oneTask(task_t task) {
   getSlot(task);
-  transferData();
+  transferData(task);
   leaveSlot(task);
 }
 
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) {
 
-	// https://pingpong.chalmers.se/courseId/5850/node.do?id=2715451&ts=1448981096052&u=-2096496696
-
 	lock_acquire(&lock);
-	printf("Getting slot...");
-
-
 	// while no space on bus - wait...
 	while ((tasks == 3) || (tasks > 0 && currDirection != task.direction)) {
 		if (task.priority == HIGH) {
@@ -161,23 +156,19 @@ void getSlot(task_t task) {
 	tasks++;
 	currDirection = task.direction;
 
-	if (task.priority == HIGH)
-		printf("Prio task got slot!");
-
 	lock_release(&lock);
 }
 
 /* task processes data on the bus send/receive */
-void transferData() {
-  //printf("Transferring data...");
+void transferData(task) {
+  	printf("TP: %i", task.priority);
 	timer_usleep(random_ulong() % 100);
-	//printf("Transfer complete!");
+	printf("Q: %i D: %i PQ: %i", inQueue[task.direction], task.direction, queuePrio[task.direction]);
 }
 
 /* task releases the slot */
 void leaveSlot(task_t task) {
 	lock_acquire(&lock);
-
 	// done on the bus
 	tasks--;
 
@@ -199,6 +190,4 @@ void leaveSlot(task_t task) {
 	}
 
 	lock_release(&lock);
-
-	printf("Left slot!");
 }
