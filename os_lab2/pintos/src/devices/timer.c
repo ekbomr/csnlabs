@@ -90,6 +90,10 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks)
 {
+  // Why?
+  if (ticks <= 0)
+    return;
+
   thread_current()->sleep_ticks = ticks;
 
   /* Temporarily disable Interrupts */
@@ -177,12 +181,13 @@ decr_tick_count (struct thread *thread, void *aux)
 {
   if (thread->status == THREAD_BLOCKED)
   {
-    if (thread->sleep_ticks > 0)
+    if (thread->sleep_ticks > 0) {
       thread->sleep_ticks--;
-
-    if (thread->sleep_ticks <= 0)
-    {
-      thread_unblock (thread);
+      
+      if (thread->sleep_ticks <= 0)
+      {
+        thread_unblock (thread);
+      }
     }
   }
 }

@@ -177,19 +177,7 @@ void leaveSlot(task_t task) {
 		cond_broadcast(waiting[1-currDirection], &lock);
 	}
 
-	printf("Left slot!");
+	lock_release(&lock);
 
-	//
-	// if (task.direction == SENDER) {
-	// 	activeSend--;
-	// 	lock_release(&lock);
-	// 	sema_up(active[SENDER]);
-	// 	msg("SENDER left slot...");
-	// }
-	// else {
-	// 	activeRecv--;
-	// 	lock_release(&lock);
-	// 	sema_up(active[RECEIVER]);
-	// 	msg("RECEIVER left slot...");
-	// }
+	printf("Left slot!");
 }
