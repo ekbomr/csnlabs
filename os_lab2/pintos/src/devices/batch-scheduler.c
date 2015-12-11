@@ -41,16 +41,25 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 
 int tasks = 0;
 int currDirection = 0;
+
 int queueSend = 0;
 int queueRecv = 0;
 int inQueue[2];
-int queuePrio = 0;
+
+int queuePrioSend = 0;
+int queuePrioRecv = 0;
+int prioQueue[2];
 
 struct lock lock;
+
 struct condition waitingToSend;
 struct condition waitingToRecv;
 struct condition* waiting[2];
-struct condition waitingPrio;
+
+struct condition waitingSendPrio;
+struct condition waitingRecvPrio;
+struct condition* waitingPrio[2];
+
 
 /* initializes semaphores */
 void init_bus(void){
@@ -60,11 +69,20 @@ void init_bus(void){
 	lock_init(&lock);
 	cond_init(&waitingToSend);
 	cond_init(&waitingToRecv);
-	cond_init(&waitingPrio);
+	cond_init(&waitingSendPrio);
+	cond_init(&waitingRecvPrio);
+
 	waiting[SENDER] = &waitingToSend;
 	waiting[RECEIVER] = &waitingToRecv;
+
 	inQueue[SENDER] = queueSend;
 	inQueue[RECEIVER] = queueRecv;
+
+	prioQueue[SENDER] = queuePrioSend;
+	prioQueue[RECEIVER] = queuePrioRecv;
+
+	waitingPrio[SENDER] = &waitingSendPrio;
+	waitingPrio[RECEIVER] = &waitingRecvPrio;
 
 }
 
@@ -140,9 +158,9 @@ void getSlot(task_t task) {
 	// while no space on bus - wait...
 	while ((tasks == 3) || (tasks > 0 && currDirection != task.direction)) {
 		if (task.priority == HIGH) {
-			queuePrio++;
-			cond_wait(&waitingPrio, &lock);
-			queuePrio--;
+			prioQueue[task.direction]++;
+			cond_wait(waitingPrio[task.direction], &lock);
+			prioQueue[task.direction]--;
 		}
 
 		else {
@@ -155,6 +173,11 @@ void getSlot(task_t task) {
 	// get on the bus
 	tasks++;
 	currDirection = task.direction;
+
+	if (task.priority == HIGH)
+		printf("Prio");
+	else
+		printf("Normal");
 
 	lock_release(&lock);
 }
@@ -173,8 +196,11 @@ void leaveSlot(task_t task) {
 	tasks--;
 
 	// If anyone in prio queue, signal them
-	if (queuePrio > 0) {
-		cond_signal(&waitingPrio, &lock);
+	if (prioQueue[SENDER] + prioQueue[RECEIVER] > 0) {
+		if (prioQueue[currDirection] > 0)
+			cond_signal(waitingPrio[currDirection], &lock);
+		else
+			cond_broadcast(waitingPrio[1-currDirection], &lock);
 	}
 
 	// If anyone waiting to go same direction, wake them
