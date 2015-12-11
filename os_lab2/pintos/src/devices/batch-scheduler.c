@@ -44,12 +44,13 @@ int currDirection = 0;
 int queueSend = 0;
 int queueRecv = 0;
 int inQueue[2];
+int queuePrio = 0;
 
 struct lock lock;
 struct condition waitingToSend;
 struct condition waitingToRecv;
 struct condition* waiting[2];
-
+struct condition waitingPrio;
 
 /* initializes semaphores */
 void init_bus(void){
@@ -59,6 +60,7 @@ void init_bus(void){
 	lock_init(&lock);
 	cond_init(&waitingToSend);
 	cond_init(&waitingToRecv);
+	cond_init(&waitingPrio);
 	waiting[SENDER] = &waitingToSend;
 	waiting[RECEIVER] = &waitingToRecv;
 	inQueue[SENDER] = queueSend;
@@ -134,21 +136,33 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) {
 
-// https://pingpong.chalmers.se/courseId/5850/node.do?id=2715451&ts=1448981096052&u=-2096496696
+	// https://pingpong.chalmers.se/courseId/5850/node.do?id=2715451&ts=1448981096052&u=-2096496696
 
 	lock_acquire(&lock);
 	printf("Getting slot...");
 
+
 	// while no space on bus - wait...
 	while ((tasks == 3) || (tasks > 0 && currDirection != task.direction)) {
-		inQueue[task.direction]++;
-		cond_wait(waiting[task.direction], &lock);
-		inQueue[task.direction]--;
+		if (task.priority == HIGH) {
+			queuePrio++;
+			cond_wait(&waitingPrio, &lock);
+			queuePrio--;
+		}
+
+		else {
+			inQueue[task.direction]++;
+			cond_wait(waiting[task.direction], &lock);
+			inQueue[task.direction]--;
+		}
 	}
 
 	// get on the bus
 	tasks++;
 	currDirection = task.direction;
+
+	if (task.priority == HIGH)
+		printf("Prio task got slot!");
 
 	lock_release(&lock);
 }
@@ -167,14 +181,21 @@ void leaveSlot(task_t task) {
 	// done on the bus
 	tasks--;
 
+	// If anyone in prio queue, signal them
+	if (queuePrio > 0) {
+		cond_signal(&waitingPrio, &lock);
+	}
+
 	// If anyone waiting to go same direction, wake them
 	// Why not broadcast?
-	if (inQueue[currDirection] > 0) {
-		cond_signal(waiting[currDirection], &lock);
-	}
-	// Else wake up everyone going other way
-	else if (tasks == 0) {
-		cond_broadcast(waiting[1-currDirection], &lock);
+	else {
+		if (inQueue[currDirection] > 0) {
+			cond_signal(waiting[currDirection], &lock);
+		}
+		// Else wake up everyone going other way
+		else if (tasks == 0) {
+			cond_broadcast(waiting[1-currDirection], &lock);
+		}
 	}
 
 	lock_release(&lock);
