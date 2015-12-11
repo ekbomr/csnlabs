@@ -183,7 +183,7 @@ void leaveSlot(task_t task) {
 
 	// If anyone in prio queue, signal them
 	if (queuePrio > 0) {
-		cond_signal(&waitingPrio, &lock);
+		cond_broadcast(&waitingPrio, &lock);
 	}
 
 	// If anyone waiting to go same direction, wake them
