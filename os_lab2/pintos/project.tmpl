@@ -9,9 +9,8 @@
 
 >> Fill in the group number, names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Simon Widlund <wisimon@student.chalmers.se>
+Rikard Ekbom <ekbomr@student.chalmers.se>
 
 ---- PRELIMINARIES ----
 
@@ -40,10 +39,30 @@ Added to /src/threads/thread.h:
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+First copy the value of the ticks argument to the sleep_ticks struct member.
+Then we disable external interrupts with a call to intr_disable, to prevent
+the thread_block call from being interrupted by some external event.
+After the thread_block call, we explicitly re-enable external interrupts.
+
+The interrupt handler, called timer_interrupt, increments the global
+tick counter, then it iterates over all threads with thread_foreach, and
+runs our function decr_tick_count on every thread.
+
+decr_tick_count first checks if the thread is blocked, and if the sleep_ticks count is > 0,
+sleep_ticks is decremented, and finally we check if the sleep_ticks has
+reached 0. If it has, we call thread_unblock to unblock the current thread.
+
+After unblocking, the interrupt handler increments the system tick with a call
+to thread_tick.
 
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+The only thing we can realistically optimize is the function that is run
+on each thread. To make this function as fast as possible, we first check
+if the thread is blocked. If it is not, we return immediately.
+
 
 ---- SYNCHRONIZATION ----
 
@@ -57,6 +76,8 @@ Added to /src/threads/thread.h:
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+
 
 			    BATCH SCHEDULING
 			    ================
