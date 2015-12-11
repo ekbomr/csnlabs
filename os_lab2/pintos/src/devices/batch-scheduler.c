@@ -153,7 +153,6 @@ void oneTask(task_t task) {
 
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) {
-
 	lock_acquire(&lock);
 	// while no space on bus - wait...
 	while ((tasks == 3) || (tasks > 0 && currDirection != task.direction)) {
@@ -168,24 +167,17 @@ void getSlot(task_t task) {
 			inQueue[task.direction]--;
 		}
 	}
-
 	// get on the bus
 	tasks++;
 	currDirection = task.direction;
-/*
-	if (task.priority == HIGH)
-		printf("Prio");
-	else
-		printf("Normal");*/
-
 	lock_release(&lock);
 }
 
 /* task processes data on the bus send/receive */
 void transferData(task_t task) {
-	timer_usleep(random_ulong() % 10000);
-  	printf("D: %i ", task.direction);
-	printf("sQ: %i rQ: %i\n", inQueue[0], inQueue[1]);
+	timer_usleep(random_ulong()%1000);
+  	printf("TP:%i",task.priority);
+	printf("sQ:%irQ:%i|", inQueue[0], inQueue[1]);
 }
 
 /* task releases the slot */
@@ -201,7 +193,6 @@ void leaveSlot(task_t task) {
 		else
 			cond_broadcast(waitingPrio[1-currDirection], &lock);
 	}
-
 	// If anyone waiting to go same direction, wake them
 	// Why not broadcast?
 	else {
@@ -213,6 +204,5 @@ void leaveSlot(task_t task) {
 			cond_broadcast(waiting[1-currDirection], &lock);
 		}
 	}
-
 	lock_release(&lock);
 }

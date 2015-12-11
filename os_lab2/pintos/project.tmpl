@@ -66,20 +66,75 @@ Added to /src/threads/thread.h:
 >> `struct' member, global or static variable, semaphore, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Added to /src/devices/batch-scheduler.c:
+	int tasks = 0;
+		- Keeps track of how many tasks currently on the bus.
+
+	int currDirection = 0;
+		- Current direction of tasks on the bus.
+
+	int queueSend = 0;
+		- How many tasks waiting in the sending end of the bus.
+	
+	int queueRecv = 0;
+		- How many tasks waiting in the receiving end of the bus.
+	
+	int inQueue[2];
+		- Array with queueSend at position 0 and queueRecv at position 1.
+
+	int queuePrioSend = 0;
+		- How many tasks waiting in the prioritized sending end of the bus.
+
+	int queuePrioRecv = 0;
+		- How many tasks waiting in the prioritized receiving end of the bus.
+
+	int prioQueue[2];
+		- Array with queuePrioSend at position 0 and queuePrioRecv at position 1.
+
+	struct lock lock;
+		- Locking when a task is trying to get on the bus or when leaving a slot on the bus to another task.
+
+	struct condition waitingToSend;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition waitingToRecv;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition* waiting[2];
+		- Array containing conditions waitingToRecv and waitingToSend.
+
+	struct condition waitingSendPrio;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition waitingRecvPrio;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition* waitingPrio[2];
+		- Array containing conditions waitingRecvPrio and waitingSendPrio.
+
 ---- SYNCHRONIZATION ----
 
 >> C1: How does your solution guarantee that no more that 3 tasks
 >> are using the bus in the same direction?
 
+	In our getSlot function the task trying to acquire a bus slot first checks if the global task variable is 3 and if it is then the task is put to sleep in a corresponding condition variable. If there is not 3 tasks currently on the bus and the current direction is the same as the tasks direction then the task takes a slot on the bus and the task variable is incremented.
+
 >> C2: What prevents tasks from opposite directions from using the
 >> bus simultaneously?
+
+	The global variable currDirection keeps track of the current way that tasks are being sent on the bus, so before a task gets a slot on the bus it first checks if the currDirection is the same as the tasks direction, if it is not the same then the task is put in a queue and then put to sleep.
+
 
 >> C3: How does your solution grant priority to high priority tasks over
 >> the waiting tasks in the same direction?
 
+	When a task is done with its work it will then in the leaveSlot function it will first check if there currently are any tasks in the priority queue and if it is then the task will signal that priority task to wake up and take a slot on the bus.
+
 >> C4: How do you guarantee that despite having priority, high priority
 >> tasks do not start using the bus while there are still still using
 >> it in the oposite direction?
+
+	When a task is done and it is leaving the bus slot to another task it first checks if there are any prioritized tasks waiting to get a bus slot. If there are any then it checks if the tasks is in the same direction as the variable currDirection and wakes a waiting task going in the same direction.	
 
 ---- RATIONALE ----
 
