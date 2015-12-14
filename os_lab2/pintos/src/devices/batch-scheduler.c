@@ -41,6 +41,7 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 
 int tasks = 0;
 int currDirection = 0;
+int prints = 0;
 
 int queueSend = 0;
 int queueRecv = 0;
@@ -175,9 +176,10 @@ void getSlot(task_t task) {
 
 /* task processes data on the bus send/receive */
 void transferData(task_t task) {
-	timer_usleep(random_ulong()%1000);
-  	printf("TP:%i",task.priority);
-	printf("sQ:%irQ:%i|", inQueue[0], inQueue[1]);
+	timer_usleep(random_ulong()%10);
+	prints++;
+  	printf("%i: TP:%i ",prints, task.priority);
+	printf("sQ: %i rQ: %i spQ: %i rpQ: %i\n", inQueue[0], inQueue[1], prioQueue[0], prioQueue[1]);
 }
 
 /* task releases the slot */
@@ -195,7 +197,7 @@ void leaveSlot(task_t task) {
 	}
 	// If anyone waiting to go same direction, wake them
 	// Why not broadcast?
-	else {
+	else if (inQueue[SENDER] + inQueue[RECEIVER] > 0){
 		if (inQueue[currDirection] > 0) {
 			cond_signal(waiting[currDirection], &lock);
 		}
