@@ -1,0 +1,223 @@
+# Lab 4 helper functions 
+# This skeleton does not handle race conditions/locks
+
+# ------------------------------------------------------------------------------   
+# Start listening and handle incoming connections in board() function
+# ------------------------------------------------------------------------------   
+def start_board():
+  ip = mycontext['ip']
+  port = mycontext['port']
+  print "Listening on IP " + str(ip) +" port " + str(port)
+  try: 
+    listencommhandle = waitforconn(ip,port,board)
+  except Exception, e:
+    print "Exception in start_board: %s, %s\n" %(type(e), e)
+    raise
+    #pass
+
+# ------------------------------------------------------------------------------    
+# Called when an incoming message is received. 
+# ------------------------------------------------------------------------------    
+def board(ip, port, sockobj, thiscommhandle, listencommhandle):
+  try:
+    msgheader = sockobj.recv(1024) # Receive message
+    
+    # React depending on message type: HTTP GET or POST, or some other type of communication.
+    if msgheader.startswith( 'GET' ):
+      print "Received GET"
+      handle_request_get(msgheader, sockobj, thiscommhandle)
+    elif msgheader.startswith( 'POST /Add' ):
+      handle_request_add(msgheader, sockobj, thiscommhandle)
+    elif msgheader.startswith( 'POST /Change' ):
+      handle_request_change(msgheader, sockobj, thiscommhandle)
+  except Exception, e:
+    print "Exception in board: %s, %s\n" %(type(e), e)
+    raise
+# ------------------------------------------------------------------------------
+# Handles initial GET request from browser, outputs HTML string and closes socket.
+# ------------------------------------------------------------------------------
+def handle_request_get(msgheader, sockobj, thiscommhandle):
+  htmlresponse = generate_html_page("")
+  sockobj.send(make_http_ok_response(htmlresponse))
+  stopcomm(thiscommhandle)  
+
+# ------------------------------------------------------------------------------
+# Handles POST \Add request from browser
+# ------------------------------------------------------------------------------
+def handle_request_add(msgheader, sockobj, thiscommhandle):
+  print "Received Add"
+  
+  #increment logical clock
+  mycontext['ts'] = mycontext['ts'] + 1
+  
+  #check if valid request (contains comment)
+  comment=msgheader.split('comment=')[1]
+  
+  # Mark the entry as Add, and store attributes
+  # We use the HTML query format to store the entries locally
+  # example:
+  # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
+  entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (comment, mycontext['ts'], mycontext['ip'], mycontext['port'], 'Add')
+  
+  # Add to local store
+  mycontext['entrieslist'].append(entry)
+  
+  # Send the page
+  handle_request_get(msgheader, sockobj, thiscommhandle)
+  
+# ------------------------------------------------------------------------------
+# Handles POST /Change request from browser
+# ------------------------------------------------------------------------------
+def handle_request_change(msgheader, sockobj, thiscommhandle):
+  print "Received POST /Change"
+
+  #increment logical clock
+  mycontext['ts'] = mycontext['ts'] + 1
+
+  #extract the query from the HTTP request  
+  query = extract_http_request_contents(msgheader)
+  # extract the query parameters
+  parameters = extract_parameters_from_query(query)
+  print parameters
+  comment = parameters['comment']
+  action = parameters['action']
+  ref_ts = int(parameters['ts'])
+  ref_ip = parameters['ip']
+  ref_port = int(parameters['port'])
+  
+  print comment, action, ref_ts, ref_ip, ref_port
+
+  # Process the query
+  # TODO ...
+   
+  # Save the src ip/port and timestamp of the query
+  entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['ts'], mycontext['ip'], mycontext['port'])
+
+  # Add query to local store
+  mycontext['entrieslist'].append(entry)
+  
+  #Send the page
+  handle_request_get(msgheader, sockobj, thiscommhandle)
+  
+# ------------------------------------------------------------------------------
+# Wrap into HTTP headers
+# ------------------------------------------------------------------------------
+def make_http_ok_response(htmlresponse):
+    return "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n" + \
+    "Content-length: %i\r\n\r\n%s" % (len(htmlresponse), htmlresponse)
+
+# ------------------------------------------------------------------------------
+# Utility function to extract the contents (payload) from HTTP request
+# ------------------------------------------------------------------------------
+def extract_http_request_contents(header):
+  # find content length
+  conent_length = header.split('Content-Length: ')[1]
+  conent_length = int(conent_length.split('\r\n')[0])
+  
+  # extract the http response body and discard the header
+  contetns = header[-conent_length:]
+  return contetns
+
+# ------------------------------------------------------------------------------
+# Utility function to extract query parameter from HTML query
+# ------------------------------------------------------------------------------
+def extract_parameters_from_query(msg):
+  # extract the query parameters as a dictionary: {name:value}
+  # example input format: comment=aa&ts=2&ip=127.0.0.1&port=63101&action=Delete
+  parameters={}
+  arr = msg.split('&')
+  for a in arr:
+    pp = a.split('=')
+    if len(pp)>1:
+      parameters[pp[0]] = pp[1]
+  return parameters
+
+# ------------------------------------------------------------------------------
+# Utility function to wrap an entry with HTML form markup
+# ------------------------------------------------------------------------------
+def entry_to_html(entry):
+  if len(entry) > 0:
+    # extract the query parameters
+    parameters = extract_parameters_from_query(entry)
+    comment = parameters['comment']
+    action = parameters['action']
+    src_ts = int(parameters['src_ts'])
+    src_ip = parameters['src_ip']
+    src_port = int(parameters['src_port'])
+    
+    if action == 'Add':
+      return '''<form class="entry" method="post" action="Change" >
+                  <input type="text" name="comment" value="%s" size="50"/>
+                  <input type="hidden" name="ts" value="%u" />
+                  <input type="hidden" name="ip" value="%s" />
+                  <input type="hidden" name="port" value="%u" />
+                  <input type="submit" name="action" value="Modify" />
+                  <input type="submit" name="action" value="Delete" />
+                </form>''' %(comment, src_ts, src_ip, src_port)
+  return "" 
+       
+# ------------------------------------------------------------------------------
+# Outputs the blackboard html 
+# Optional parameter: status.
+# ------------------------------------------------------------------------------   
+def generate_html_page(status=""):
+  #Initialize blackboard content
+  
+  # dynamic title showing Ip address, port and up time.
+  board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['ip'], mycontext['port'], int(getruntime()))  
+  # An optional status message
+  status_message = "<div class='status'>%s</div>" % (status)
+  
+  # convert entries to html
+  entries = [entry_to_html(e) for e in mycontext['entrieslist']]
+  entries = "".join(entries)
+  
+  # merging the contents of the board with the title
+  # and wrapping all with <div id="boardcontents_placeholder”>...</div>
+  content = [mycontext['headerhtml'], '<div id="boardcontents_placeholder">', board_title, status_message, entries, '</div>', mycontext['footerhtml']]   
+  
+  #Concatenate strings into huge string representing the final html
+  content = "".join(content)
+  del entries
+  return content
+  
+# ------------------------------------------------------------------------------    
+# Main entry point of the program. Initalizes global variables in mycontext
+# and calls start_board() which opens the socket for incoming connections.
+# ------------------------------------------------------------------------------
+if callfunc == 'initialize':
+  # Running remotely (assuming that we pass one input argument only when we run remotely):
+  # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
+  if len(callargs) == 1:
+    port = int(callargs[0])
+    ip = getmyip()
+
+  # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
+  # If you start multiple local instances using different ports, you can debug and test your code locally
+  # example:
+  # python ../demokit/repy.py ../demokit/restrictions.default skeleton2015advanced.repy 127.0.0.1 63100
+  elif len(callargs) == 2:
+    port = int(callargs[1])
+    ip = callargs[0]
+  
+  # Fail if we don't have 1 or 2 arguments  
+  else:
+    raise Exception("Specify a port only for auto detection of IP, or specify IP and port")
+
+  #GLOBAL Variables go to mycontext
+  
+  #logical clock\timestamp
+  mycontext['ts'] = 0 
+  
+  #Initialize Port and IP
+  mycontext['port'] = port
+  mycontext['ip'] = ip
+  
+  #read header and footer html files
+  mycontext['headerhtml'] = file("header.html").read()
+  mycontext['footerhtml'] = file("footer.html").read()
+
+  #Initialize entrieslist to hold future board entries
+  mycontext['entrieslist'] = []
+  
+  start_board() 
