@@ -69,15 +69,20 @@ if the thread is blocked. If it is not, we return immediately.
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+We avoid them by disabling interrupts before calling thread_block.
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Since interrupts are disabled, there can be no race conditions.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
-
+We never considered an alternative design. We simply followed the hint in the
+lab PM, and based our solution on that.
 
 			    BATCH SCHEDULING
 			    ================
@@ -96,10 +101,10 @@ Added to /src/devices/batch-scheduler.c:
 
 	int queueSend = 0;
 		- How many tasks waiting in the sending end of the bus.
-	
+
 	int queueRecv = 0;
 		- How many tasks waiting in the receiving end of the bus.
-	
+
 	int inQueue[2];
 		- Array with queueSend at position 0 and queueRecv at position 1.
 
@@ -155,13 +160,18 @@ Added to /src/devices/batch-scheduler.c:
 >> tasks do not start using the bus while there are still still using
 >> it in the oposite direction?
 
-	When a task is done and it is leaving the bus slot to another task it first checks if there are any prioritized tasks waiting to get a bus slot. If there are any then it checks if the tasks is in the same direction as the variable currDirection and wakes a waiting task going in the same direction.	
+	When a task is done and it is leaving the bus slot to another task it first checks if there are any prioritized tasks waiting to get a bus slot. If there are any then it checks if the tasks is in the same direction as the variable currDirection and wakes a waiting task going in the same direction.
 
 ---- RATIONALE ----
 
 >> C6: Why did you choose this design? Did you consider other design
 >> alternatives? In what ways is it superior to another design you considered?
 
+We chose this design because it was the easiest to implement. In the end, we
+basically chose the most high-level approach available to us without implmenting
+additional synchronization primitives. We did consider, and even started
+implementing, another design based on using only semaphores. However, we found
+that design to be much harder to implement.
 
 			   SURVEY QUESTIONS (optional)
 			   ===========================
