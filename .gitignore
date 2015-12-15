@@ -29,6 +29,6 @@
 *.pyc
 
 # Custom
-#*.py
+*.py
 *.sw*
 iplist.txt
