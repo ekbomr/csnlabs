@@ -12,7 +12,6 @@ def start_board():
     listencommhandle = waitforconn(ip,port,board)
   except Exception, e:
     print "Exception in start_board: %s, %s\n" %(type(e), e)
-    raise
     #pass
 
 # ------------------------------------------------------------------------------
@@ -21,18 +20,28 @@ def start_board():
 def board(ip, port, sockobj, thiscommhandle, listencommhandle):
   try:
     msgheader = sockobj.recv(1024) # Receive message
-
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
       print "Received GET"
       handle_request_get(msgheader, sockobj, thiscommhandle)
+
     elif msgheader.startswith( 'POST /Add' ):
-      handle_request_add(msgheader, sockobj, thiscommhandle)
+      handle_request_add(msgheader, sockobj, thiscommhandle, "POST")
+      post_msg_to_all_boards()
+
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
+      update_msg_to_all_boards()
+
+    elif msgheader.startswith( 'BOARD_UPDATE /Add'):
+      handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
+
+    elif msgheader.startswith( 'BOARD_UPDATE /Change'):
+      handle_request_change(msgheader, sockobj, thiscommhandle, "BOARD_UPDATE")
+
   except Exception, e:
     print "Exception in board: %s, %s\n" %(type(e), e)
-    raise
+
 # ------------------------------------------------------------------------------
 # Handles initial GET request from browser, outputs HTML string and closes socket.
 # ------------------------------------------------------------------------------
@@ -44,26 +53,49 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
-def handle_request_add(msgheader, sockobj, thiscommhandle):
+def handle_request_add(msgheader, sockobj, thiscommhandle, action):
   print "Received Add"
 
   #increment logical clock
-  mycontext['ts'] = mycontext['ts'] + 1
+  mycontext['timeStamp'] = mycontext['timeStamp'] + 1
 
   #check if valid request (contains comment)
-  comment=msgheader.split('comment=')[1]
+  if action == "POST":
+    comment=msgheader.split('comment=')[1]
 
-  # Mark the entry as Add, and store attributes
-  # We use the HTML query format to store the entries locally
-  # example:
-  # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
-  entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (comment, mycontext['ts'], mycontext['ip'], mycontext['port'], 'Add')
+    # Mark the entry as Add, and store attributes
+    # We use the HTML query format to store the entries locally
+    # example:
+    # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
+    entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
-  # Add to local store
-  mycontext['entrieslist'].append(entry)
+    # Add to local store
+    mycontext['entrieslist'].append(entry)
+
+  elif action == 'BOARD_UPDATE':
+    entriesRefresh = []
+    entries = msgheader.split('entries=')[1]
+    for entry in entries.split('||'):
+      if not entry == '':
+        entriesRefresh.append(entry)
+
+    mycontext['entrieslist'] = entriesRefresh
 
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
+
+
+def post_msg_to_all_boards():
+  print mycontext['iplist']
+  msg = 'BOARD_UPDATE /Add' + 'entries='
+  for entry in mycontext['entrieslist']:
+    msg += entry + '||' 
+
+  vesselIPs = mycontext['iplist']
+  for ipaddr in vesselIPs:
+    socketobject = openconn(ipaddr, mycontext['port'])
+    socketobject.send(msg)
+    socketobject.close()
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
@@ -72,32 +104,51 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
   print "Received POST /Change"
 
   #increment logical clock
-  mycontext['ts'] = mycontext['ts'] + 1
+  mycontext['timeStamp'] = mycontext['timeStamp'] + 1
 
   #extract the query from the HTTP request
   query = extract_http_request_contents(msgheader)
   # extract the query parameters
   parameters = extract_parameters_from_query(query)
   print parameters
+  #prints {'comment': 'hej', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Delete', 'port': '63117'}
+  #prints {'comment': 'lol', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Modify', 'port': '63117'}
+
+
   comment = parameters['comment']
   action = parameters['action']
-  ref_ts = int(parameters['ts'])
+  ref_timeStamp = int(parameters['timeStamp'])
   ref_ip = parameters['ip']
   ref_port = int(parameters['port'])
 
   print comment, action, ref_ts, ref_ip, ref_port
+  #prints hej Delete 1 206.207.248.34 63117
+  #prints lol Modify 1 206.207.248.34 63117
+
 
   # Process the query
   # TODO ...
+  if action == "Delete":
+    delete_msg_from_board(ref_timeStamp, ref_ip)
+  #elif action == "Modify":
 
   # Save the src ip/port and timestamp of the query
-  entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['ts'], mycontext['ip'], mycontext['port'])
+  entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['timeStamp'], mycontext['ip'], mycontext['port'])
 
   # Add query to local store
   mycontext['entrieslist'].append(entry)
 
   #Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
+
+def delete_msg_from_board(timeStamp, ip):
+  entrieslist = mycontext['entrieslist']
+
+  for entry in range(len(entrieslist)):
+    entry = extract_parameters_from_query(entrieslist[entry])
+    if timeStamp == entry['timeStamp'] and ip == entry['ip']:
+      mycontext['entrieslist'].
+      
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -123,7 +174,7 @@ def extract_http_request_contents(header):
 # ------------------------------------------------------------------------------
 def extract_parameters_from_query(msg):
   # extract the query parameters as a dictionary: {name:value}
-  # example input format: comment=aa&ts=2&ip=127.0.0.1&port=63101&action=Delete
+  # example input format: comment=aa&timeStamp=2&ip=127.0.0.1&port=63101&action=Delete
   parameters={}
   arr = msg.split('&')
   for a in arr:
@@ -148,7 +199,7 @@ def entry_to_html(entry):
     if action == 'Add':
       return '''<form class="entry" method="post" action="Change" >
                   <input type="text" name="comment" value="%s" size="50"/>
-                  <input type="hidden" name="ts" value="%u" />
+                  <input type="hidden" name="timeStamp" value="%u" />
                   <input type="hidden" name="ip" value="%s" />
                   <input type="hidden" name="port" value="%u" />
                   <input type="submit" name="action" value="Modify" />
@@ -192,6 +243,16 @@ if callfunc == 'initialize':
     port = int(callargs[0])
     ip = getmyip()
 
+    vesselIPs = []
+    ipList = open('iplist.txt', 'r')
+    for ipaddr in ipList:
+      ipaddr = ipaddr.rstrip()
+      if not ipaddr == ip:
+        vesselIPs.append(ipaddr)
+
+    mycontext['iplist'] = vesselIPs
+    ipList.close()
+
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
   # example:
@@ -207,7 +268,7 @@ if callfunc == 'initialize':
   #GLOBAL Variables go to mycontext
 
   #logical clock\timestamp
-  mycontext['ts'] = 0
+  mycontext['timeStamp'] = 0
 
   #Initialize Port and IP
   mycontext['port'] = port
@@ -219,5 +280,6 @@ if callfunc == 'initialize':
 
   #Initialize entrieslist to hold future board entries
   mycontext['entrieslist'] = []
+  mycontext['changeHistory'] = []
 
   start_board()
