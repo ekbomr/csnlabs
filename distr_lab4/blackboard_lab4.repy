@@ -52,14 +52,14 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
-def handle_request_add(msgheader, sockobj, thiscommhandle, action):
+def handle_request_add(msgheader, sockobj, thiscommhandle, request):
   print "Received Add"
 
   #increment logical clock
   mycontext['timeStamp'] = mycontext['timeStamp'] + 1
 
   #check if valid request (contains comment)
-  if action == "POST":
+  if request == "POST":
     comment=msgheader.split('comment=')[1]
 
     # Mark the entry as Add, and store attributes
@@ -69,14 +69,35 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, action):
     entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
     # Add to local store
-    mycontext['entrieslist'].append(entry)
+    mycontext['entrieslist'].append((mycontext['timeStamp'], mycontext['ip'], entry))
 
-  elif action == 'BOARD_UPDATE':
+  elif request == 'BOARD_UPDATE':
     entriesRefresh = []
-    entries = msgheader.split('entries=')[1]
-    for entry in entries.split('||'):
-      if not entry == '':
-        entriesRefresh.append(entry)
+    prevTimeStamp = []
+    
+    entries = msgheader.split('entries=')[1].split('||')
+    for index in xrange(len(entries)):
+      if not entries[index] == '':
+        parameters = extract_parameters_from_query(entries[index])
+        if len(prevTimeStamp) > 0 and prevTimeStamp[0] == parameters['timeStamp']:
+
+          inserted = False
+          for stampIndex in xrange(len(prevTimeStamp)):
+            if compareIPaddresses(parameters['ip'], prevTimeStamp[stampIndex][1]) == 1:
+              
+              prevTimeStamp.insert(stampIndex ,(parameters['timeStamp'], parameters['ip']))
+              entriesRefresh.insert(index - stampIndex, (parameters['timeStamp'], parameters['ip'], entries[index]))
+              inserted = True
+              break
+
+          if not inserted:
+            prevTimeStamp.append((parameters['timeStamp'], parameters['ip']))
+            entriesRefresh.append((parameters['timeStamp'], parameters['ip'], entries[index]))
+        
+        else:
+          entriesRefresh.append((parameters['timeStamp'], parameters['ip'], entries[index]))
+          prevTimeStamp.insert(0, (parameters['timeStamp'], parameters['ip']))
+
 
     mycontext['entrieslist'] = entriesRefresh
 
@@ -87,7 +108,8 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, action):
 def post_msg_to_all_boards():
   msg = 'BOARD_UPDATE /Add' + 'entries='
   for entry in mycontext['entrieslist']:
-    msg += entry + '||' 
+    print "post msg:", entry
+    msg += entry[2] + '||' 
 
   vesselIPs = mycontext['iplist']
   for ipaddr in vesselIPs:
@@ -159,15 +181,14 @@ def handle_request_change(msgheader, sockobj, thiscommhandle, request):
 
     #Send the page
     handle_request_get(msgheader, sockobj, thiscommhandle)
-    update_msg_to_all_boards(deletedMsg)
-    
+    update_msg_to_all_boards(deletedMsg[2])
 
 
 def delete_msg_from_board(timeStamp, ip):
   entrieslist = mycontext['entrieslist']
 
   for entryIndex in range(len(entrieslist)):
-    entry = extract_parameters_from_query(entrieslist[entryIndex])
+    entry = extract_parameters_from_query(entrieslist[entryIndex][2])
     if timeStamp == int(entry['timeStamp']) and ip == entry['ip']:
       return mycontext['entrieslist'].pop(entryIndex)
       
@@ -193,8 +214,8 @@ def ipToInt(ipaddr):
   return long(ipInt)
 
 # "key" function for sort()
-def getKey(msgTuple):
-  return msgTuple[0]
+#def getKey(msgTuple):
+#  return msgTuple[0]
 
 
 # ------------------------------------------------------------------------------
@@ -246,8 +267,8 @@ def entry_to_html(entry):
     if action == 'Add':
       return '''<form class="entry" method="post" action="Change" >
                   <input type="text" name="comment" value="%s" size="50"/>
-                  <input type="hidden" name="timeStamp" value="%u" />
-                  <input type="hidden" name="ip" value="%s" />
+                  <input type="text" name="timeStamp" value="%u" />
+                  <input type="text" name="ip" value="%s" />
                   <input type="hidden" name="port" value="%u" />
                   <input type="submit" name="action" value="Modify" />
                   <input type="submit" name="action" value="Delete" />
@@ -267,7 +288,7 @@ def generate_html_page(status=""):
   status_message = "<div class='status'>%s</div>" % (status)
 
   # convert entries to html
-  entries = [entry_to_html(e) for e in mycontext['entrieslist']]
+  entries = [entry_to_html(entry[2]) for entry in mycontext['entrieslist']]
   entries = "".join(entries)
 
   # merging the contents of the board with the title
@@ -326,8 +347,7 @@ if callfunc == 'initialize':
   mycontext['footerhtml'] = file("footer.html").read()
 
   #Initialize entrieslist to hold future board entries
-  #mycontext['entrieslist'] = []
-  mycontext['entrieslist'] = {}
+  mycontext['entrieslist'] = []
 
   mycontext['changeHistory'] = []
 
