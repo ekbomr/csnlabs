@@ -30,8 +30,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       post_msg_to_all_boards()
 
     elif msgheader.startswith( 'POST /Change' ):
-      handle_request_change(msgheader, sockobj, thiscommhandle)
-      update_msg_to_all_boards()
+      handle_request_change(msgheader, sockobj, thiscommhandle, "POST")
 
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
       handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
@@ -67,7 +66,7 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, action):
     # We use the HTML query format to store the entries locally
     # example:
     # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
-    entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
+    entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
     # Add to local store
     mycontext['entrieslist'].append(entry)
@@ -86,7 +85,6 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, action):
 
 
 def post_msg_to_all_boards():
-  print mycontext['iplist']
   msg = 'BOARD_UPDATE /Add' + 'entries='
   for entry in mycontext['entrieslist']:
     msg += entry + '||' 
@@ -97,58 +95,107 @@ def post_msg_to_all_boards():
     socketobject.send(msg)
     socketobject.close()
 
+def update_msg_to_all_boards(deletedMsg):
+  msg = 'BOARD_UPDATE /Change' + 'change=' + deletedMsg
+
+  vesselIPs = mycontext['iplist']
+  for ipaddr in vesselIPs:
+    socketobject = openconn(ipaddr, mycontext['port'])
+    socketobject.send(msg)
+    socketobject.close()
+
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
 # ------------------------------------------------------------------------------
-def handle_request_change(msgheader, sockobj, thiscommhandle):
+def handle_request_change(msgheader, sockobj, thiscommhandle, request):
   print "Received POST /Change"
+  deletedMsg = ""
+  if request == "BOARD_UPDATE":
+    msgheader = msgheader.split("change=")[1]
+    msg = extract_parameters_from_query(msgheader)
+    print msg
+    deletedMsg = delete_msg_from_board(int(msg['timeStamp']), msg['ip'])
 
-  #increment logical clock
-  mycontext['timeStamp'] = mycontext['timeStamp'] + 1
+    if deletedMsg == -1:
+      mycontext['changeHistory'].append((int(msg['timeStamp']), msg['ip']))
 
-  #extract the query from the HTTP request
-  query = extract_http_request_contents(msgheader)
-  # extract the query parameters
-  parameters = extract_parameters_from_query(query)
-  print parameters
-  #prints {'comment': 'hej', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Delete', 'port': '63117'}
-  #prints {'comment': 'lol', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Modify', 'port': '63117'}
+    handle_request_get(msgheader, sockobj, thiscommhandle)
 
+  else:
+    #increment logical clock
+    #mycontext['timeStamp'] = mycontext['timeStamp'] + 1
 
-  comment = parameters['comment']
-  action = parameters['action']
-  ref_timeStamp = int(parameters['timeStamp'])
-  ref_ip = parameters['ip']
-  ref_port = int(parameters['port'])
+    #extract the query from the HTTP request
+    query = extract_http_request_contents(msgheader)
+    # extract the query parameters
+    parameters = extract_parameters_from_query(query)
+    #print parameters
+    #prints {'comment': 'hej', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Delete', 'port': '63117'}
+    #prints {'comment': 'lol', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Modify', 'port': '63117'}
 
-  print comment, action, ref_ts, ref_ip, ref_port
-  #prints hej Delete 1 206.207.248.34 63117
-  #prints lol Modify 1 206.207.248.34 63117
+    print parameters
+    comment = parameters['comment']
+    action = parameters['action']
+    ref_timeStamp = int(parameters['timeStamp'])
+    ref_ip = parameters['ip']
+    ref_port = int(parameters['port'])
 
+    #print comment, action, ref_ts, ref_ip, ref_port
+    #prints hej Delete 1 206.207.248.34 63117
+    #prints lol Modify 1 206.207.248.34 63117
 
-  # Process the query
-  # TODO ...
-  if action == "Delete":
-    delete_msg_from_board(ref_timeStamp, ref_ip)
-  #elif action == "Modify":
+    # Process the query
+    # TODO ...
+    if action == "Delete":
+      deletedMsg = delete_msg_from_board(ref_timeStamp, ref_ip)
+      print "Deleted msg:", deletedMsg
+    #elif action == "Modify":
 
-  # Save the src ip/port and timestamp of the query
-  entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['timeStamp'], mycontext['ip'], mycontext['port'])
+    else:
+      # Save the src ip/port and timestamp of the query
+      entry = "%s&timeStamp=%u&ip=%s&port=%u" % (query, mycontext['timeStamp'], mycontext['ip'], mycontext['port'])
+      # Add query to local store
+      mycontext['entrieslist'].append(entry)
 
-  # Add query to local store
-  mycontext['entrieslist'].append(entry)
+    #Send the page
+    handle_request_get(msgheader, sockobj, thiscommhandle)
+    update_msg_to_all_boards(deletedMsg)
+    
 
-  #Send the page
-  handle_request_get(msgheader, sockobj, thiscommhandle)
 
 def delete_msg_from_board(timeStamp, ip):
   entrieslist = mycontext['entrieslist']
 
-  for entry in range(len(entrieslist)):
-    entry = extract_parameters_from_query(entrieslist[entry])
-    if timeStamp == entry['timeStamp'] and ip == entry['ip']:
-      mycontext['entrieslist'].
+  for entryIndex in range(len(entrieslist)):
+    entry = extract_parameters_from_query(entrieslist[entryIndex])
+    if timeStamp == int(entry['timeStamp']) and ip == entry['ip']:
+      return mycontext['entrieslist'].pop(entryIndex)
       
+  return -1
+
+# Helper function for use in sort()
+def compareIPaddresses(ip1, ip2):
+  ip1int = ipToInt(ip1)
+  ip2int = ipToInt(ip2)
+
+  if ip1int == ip2int:
+    return 0
+  elif ip1int > ip2int:
+    return 1
+  else:
+    return -1
+
+# Helper function to convert IP to int
+def ipToInt(ipaddr):
+  ipInt = ''
+  for octet in ipaddr.split('.'):
+    ipInt += octet
+  return long(ipInt)
+
+# "key" function for sort()
+def getKey(msgTuple):
+  return msgTuple[0]
+
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -192,9 +239,9 @@ def entry_to_html(entry):
     parameters = extract_parameters_from_query(entry)
     comment = parameters['comment']
     action = parameters['action']
-    src_ts = int(parameters['src_ts'])
-    src_ip = parameters['src_ip']
-    src_port = int(parameters['src_port'])
+    src_ts = int(parameters['timeStamp'])
+    src_ip = parameters['ip']
+    src_port = int(parameters['port'])
 
     if action == 'Add':
       return '''<form class="entry" method="post" action="Change" >
@@ -279,7 +326,9 @@ if callfunc == 'initialize':
   mycontext['footerhtml'] = file("footer.html").read()
 
   #Initialize entrieslist to hold future board entries
-  mycontext['entrieslist'] = []
+  #mycontext['entrieslist'] = []
+  mycontext['entrieslist'] = {}
+
   mycontext['changeHistory'] = []
 
   start_board()
