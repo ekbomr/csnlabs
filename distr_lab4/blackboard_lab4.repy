@@ -22,7 +22,14 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     msgheader = sockobj.recv(1024) # Receive message
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-      print "Received GET"
+      
+      #Try to delete message from history
+      msgsToDelete = mycontext['changeHistory']
+      if len(msgsToDelete) > 0:
+        for msg in msgsToDelete:
+          delete_msg_from_board(msg[0], msg[1])
+          mycontext['changeHistory'].remove(msg)
+
       handle_request_get(msgheader, sockobj, thiscommhandle)
 
     elif msgheader.startswith( 'POST /Add' ):
@@ -32,9 +39,11 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle, "POST")
 
+    #Handle a posting vessels new message
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
       handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
 
+    #Handle a posting vessels deleted message
     elif msgheader.startswith( 'BOARD_UPDATE /Change'):
       handle_request_change(msgheader, sockobj, thiscommhandle, "BOARD_UPDATE")
 
@@ -53,58 +62,57 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle, request):
-  print "Received Add"
 
-  #increment logical clock
   mycontext['timeStamp'] = mycontext['timeStamp'] + 1
-
-  #check if valid request (contains comment)
+  #check if request is a new POST or if it is an UPDATE from another board
   if request == "POST":
     comment=msgheader.split('comment=')[1]
-
-    # Mark the entry as Add, and store attributes
-    # We use the HTML query format to store the entries locally
-    # example:
-    # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
     entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
-
-    # Add to local store
-    mycontext['entrieslist'].append((mycontext['timeStamp'], mycontext['ip'], entry))
+    mycontext['entrieslist'].insert(0, (mycontext['timeStamp'], mycontext['ip'], entry))
 
   elif request == 'BOARD_UPDATE':
+    mycontext['lock'].acquire()
     entriesRefresh = []
     prevTimeStamp = []
     
     entries = msgheader.split('entries=')[1].split('||')
-    for index in xrange(len(entries)):
-      if not entries[index] == '':
-        parameters = extract_parameters_from_query(entries[index])
-        if len(prevTimeStamp) > 0 and prevTimeStamp[0] == parameters['timeStamp']:
+    
+    #FULHAX FÖR REPY ÄR ETT JÄVLA KUKSPRÅK
+    #len -1 to ignore empty array index
+    entriesIndexList = range(len(entries)-1)
+    entriesIndexList.sort(reverse=True)
 
-          inserted = False
-          for stampIndex in xrange(len(prevTimeStamp)):
-            if compareIPaddresses(parameters['ip'], prevTimeStamp[stampIndex][1]) == 1:
-              
-              prevTimeStamp.insert(stampIndex ,(parameters['timeStamp'], parameters['ip']))
-              entriesRefresh.insert(index - stampIndex, (parameters['timeStamp'], parameters['ip'], entries[index]))
-              inserted = True
-              break
+    for index in entriesIndexList:
+      parameters = extract_parameters_from_query(entries[index])
+      entryTimeStamp = int(parameters['timeStamp'])
+      entryIP = parameters['ip']
+      
+      if len(prevTimeStamp) > 0 and prevTimeStamp[0] == entryTimeStamp:
+        inserted = False
+        for stampIndex in xrange(len(prevTimeStamp)):
+          if compareIPaddresses(entryTimeStamp, prevTimeStamp[stampIndex][1]) == 1:
+            
+            prevTimeStamp.insert(stampIndex ,(entryTimeStamp, entryTimeStamp))
+            entriesRefresh.insert(index - stampIndex, (entryTimeStamp, entryTimeStamp, entries[index]))
+            inserted = True
+            break
 
-          if not inserted:
-            prevTimeStamp.append((parameters['timeStamp'], parameters['ip']))
-            entriesRefresh.append((parameters['timeStamp'], parameters['ip'], entries[index]))
-        
-        else:
-          entriesRefresh.append((parameters['timeStamp'], parameters['ip'], entries[index]))
-          prevTimeStamp.insert(0, (parameters['timeStamp'], parameters['ip']))
-
+        if not inserted:
+          prevTimeStamp.append((entryTimeStamp, entryTimeStamp))
+          entriesRefresh.append((entryTimeStamp, entryTimeStamp, entries[index]))
+      
+      else:
+        entriesRefresh.insert(0 ,(entryTimeStamp, entryTimeStamp, entries[index]))
+        del prevTimeStamp[:]
+        prevTimeStamp.insert(0, (entryTimeStamp, entryTimeStamp))
 
     mycontext['entrieslist'] = entriesRefresh
+    mycontext['lock'].release()
 
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
 
-
+#Update rest of the board of the new message
 def post_msg_to_all_boards():
   msg = 'BOARD_UPDATE /Add' + 'entries='
   for entry in mycontext['entrieslist']:
@@ -117,6 +125,7 @@ def post_msg_to_all_boards():
     socketobject.send(msg)
     socketobject.close()
 
+#Update rest of the board of the deleted message
 def update_msg_to_all_boards(deletedMsg):
   msg = 'BOARD_UPDATE /Change' + 'change=' + deletedMsg
 
@@ -126,64 +135,8 @@ def update_msg_to_all_boards(deletedMsg):
     socketobject.send(msg)
     socketobject.close()
 
-# ------------------------------------------------------------------------------
-# Handles POST /Change request from browser
-# ------------------------------------------------------------------------------
-def handle_request_change(msgheader, sockobj, thiscommhandle, request):
-  print "Received POST /Change"
-  deletedMsg = ""
-  if request == "BOARD_UPDATE":
-    msgheader = msgheader.split("change=")[1]
-    msg = extract_parameters_from_query(msgheader)
-    print msg
-    deletedMsg = delete_msg_from_board(int(msg['timeStamp']), msg['ip'])
-
-    if deletedMsg == -1:
-      mycontext['changeHistory'].append((int(msg['timeStamp']), msg['ip']))
-
-    handle_request_get(msgheader, sockobj, thiscommhandle)
-
-  else:
-    #increment logical clock
-    #mycontext['timeStamp'] = mycontext['timeStamp'] + 1
-
-    #extract the query from the HTTP request
-    query = extract_http_request_contents(msgheader)
-    # extract the query parameters
-    parameters = extract_parameters_from_query(query)
-    #print parameters
-    #prints {'comment': 'hej', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Delete', 'port': '63117'}
-    #prints {'comment': 'lol', 'ip': '206.207.248.34', 'timeStamp': '1', 'action': 'Modify', 'port': '63117'}
-
-    print parameters
-    comment = parameters['comment']
-    action = parameters['action']
-    ref_timeStamp = int(parameters['timeStamp'])
-    ref_ip = parameters['ip']
-    ref_port = int(parameters['port'])
-
-    #print comment, action, ref_ts, ref_ip, ref_port
-    #prints hej Delete 1 206.207.248.34 63117
-    #prints lol Modify 1 206.207.248.34 63117
-
-    # Process the query
-    # TODO ...
-    if action == "Delete":
-      deletedMsg = delete_msg_from_board(ref_timeStamp, ref_ip)
-      print "Deleted msg:", deletedMsg
-    #elif action == "Modify":
-
-    else:
-      # Save the src ip/port and timestamp of the query
-      entry = "%s&timeStamp=%u&ip=%s&port=%u" % (query, mycontext['timeStamp'], mycontext['ip'], mycontext['port'])
-      # Add query to local store
-      mycontext['entrieslist'].append(entry)
-
-    #Send the page
-    handle_request_get(msgheader, sockobj, thiscommhandle)
-    update_msg_to_all_boards(deletedMsg[2])
-
-
+#Deletes the message from the local board
+#Returns -1 if the delete request arrives before the actual message
 def delete_msg_from_board(timeStamp, ip):
   entrieslist = mycontext['entrieslist']
 
@@ -191,10 +144,42 @@ def delete_msg_from_board(timeStamp, ip):
     entry = extract_parameters_from_query(entrieslist[entryIndex][2])
     if timeStamp == int(entry['timeStamp']) and ip == entry['ip']:
       return mycontext['entrieslist'].pop(entryIndex)
-      
+  
+  mycontext['changeHistory'].append = (timeStamp, ip)    
   return -1
 
-# Helper function for use in sort()
+# ------------------------------------------------------------------------------
+# Handles POST /Change request from browser
+# ------------------------------------------------------------------------------
+def handle_request_change(msgheader, sockobj, thiscommhandle, request):
+  if request == "BOARD_UPDATE":
+
+    msgheader = msgheader.split("change=")[1]
+    msg = extract_parameters_from_query(msgheader)
+    deletedMsg = delete_msg_from_board(int(msg['timeStamp']), msg['ip'])
+
+    handle_request_get(msgheader, sockobj, thiscommhandle)
+
+  else:
+    #extract the query from the HTTP request
+    query = extract_http_request_contents(msgheader)
+    # extract the query parameters
+    parameters = extract_parameters_from_query(query)
+    #comment = parameters['comment']
+    action = parameters['action']
+    ref_timeStamp = int(parameters['timeStamp'])
+    ref_ip = parameters['ip']
+    #ref_port = int(parameters['port'])
+
+    if action == "Delete":
+      deletedMsg = delete_msg_from_board(ref_timeStamp, ref_ip)
+
+    #Send the page
+    handle_request_get(msgheader, sockobj, thiscommhandle)
+    #update all other boards of the deleted message
+    update_msg_to_all_boards(deletedMsg[2])
+
+# Compares two IP addresses
 def compareIPaddresses(ip1, ip2):
   ip1int = ipToInt(ip1)
   ip2int = ipToInt(ip2)
@@ -212,11 +197,6 @@ def ipToInt(ipaddr):
   for octet in ipaddr.split('.'):
     ipInt += octet
   return long(ipInt)
-
-# "key" function for sort()
-#def getKey(msgTuple):
-#  return msgTuple[0]
-
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -337,6 +317,7 @@ if callfunc == 'initialize':
 
   #logical clock\timestamp
   mycontext['timeStamp'] = 0
+  mycontext['lock'] = getlock()
 
   #Initialize Port and IP
   mycontext['port'] = port
@@ -348,7 +329,7 @@ if callfunc == 'initialize':
 
   #Initialize entrieslist to hold future board entries
   mycontext['entrieslist'] = []
-
+  #Keep track of delete history if the delete request arrives before the message
   mycontext['changeHistory'] = []
 
   start_board()
