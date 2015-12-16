@@ -76,17 +76,19 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
     prevTimeStamp = []
     
     entries = msgheader.split('entries=')[1].split('||')
-    
+
     #FULHAX FÖR REPY ÄR ETT JÄVLA KUKSPRÅK
     #len -1 to ignore empty array index
     entriesIndexList = range(len(entries)-1)
     entriesIndexList.sort(reverse=True)
 
+    ### SORT_NEW_LIST()
     for index in entriesIndexList:
       parameters = extract_parameters_from_query(entries[index])
       entryTimeStamp = int(parameters['timeStamp'])
       entryIP = parameters['ip']
       
+
       if len(prevTimeStamp) > 0 and prevTimeStamp[0] == entryTimeStamp:
         inserted = False
         for stampIndex in xrange(len(prevTimeStamp)):
@@ -105,6 +107,34 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
         entriesRefresh.insert(0 ,(entryTimeStamp, entryIP, entries[index]))
         del prevTimeStamp[:]
         prevTimeStamp.insert(0, (entryTimeStamp, entryIP))
+
+
+    timeStamps = [entry[0] for entry in entriesRefresh]
+    ips = [ip[1] for ip in entriesRefresh]
+
+
+    ### MERGE_OLD_LIST_WITH_NEW()
+    for oldEntryIndex in xrange(len(mycontext['entrieslist'])):
+      oldEntry = mycontext['entrieslist'][oldEntryIndex]
+      if oldEntry[0] in timeStamps:
+        nmbEntries = [nmbr for nmbr in timeStamps if nmbr == oldEntry[0]]
+        entryIPaddrs = [ip for ip in ips if nmbEntries[0] == oldEntry[0]]
+
+        for index in xrange(len(nmbEntries)):
+          cmpIPres = compareIPaddresses(oldEntry[1], entryIPaddrs[index]) 
+          #same entry
+          if cmpIPres == 0:
+            break
+          #higher ip
+          elif cmpIPres == 1:
+            counter = 0
+            while oldEntry[0] != nmbEntries[0]:
+              counter += 1
+
+            entriesRefresh.insert(counter + index, oldEntry)
+      else:
+        entriesRefresh.insert(oldEntryIndex, oldEntry) 
+
 
     mycontext['entrieslist'] = entriesRefresh
     mycontext['lock'].release()
