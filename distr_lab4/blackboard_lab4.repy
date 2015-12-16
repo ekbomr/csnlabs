@@ -90,21 +90,21 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
       if len(prevTimeStamp) > 0 and prevTimeStamp[0] == entryTimeStamp:
         inserted = False
         for stampIndex in xrange(len(prevTimeStamp)):
-          if compareIPaddresses(entryTimeStamp, prevTimeStamp[stampIndex][1]) == 1:
+          if compareIPaddresses(entryIP, prevTimeStamp[stampIndex][1]) == 1:
             
-            prevTimeStamp.insert(stampIndex ,(entryTimeStamp, entryTimeStamp))
-            entriesRefresh.insert(index - stampIndex, (entryTimeStamp, entryTimeStamp, entries[index]))
+            prevTimeStamp.insert(stampIndex ,(entryTimeStamp, entryIP))
+            entriesRefresh.insert(index - stampIndex, (entryTimeStamp, entryIP, entries[index]))
             inserted = True
             break
 
         if not inserted:
-          prevTimeStamp.append((entryTimeStamp, entryTimeStamp))
-          entriesRefresh.append((entryTimeStamp, entryTimeStamp, entries[index]))
+          prevTimeStamp.append((entryTimeStamp, entryIP))
+          entriesRefresh.append((entryTimeStamp, entryIP, entries[index]))
       
       else:
-        entriesRefresh.insert(0 ,(entryTimeStamp, entryTimeStamp, entries[index]))
+        entriesRefresh.insert(0 ,(entryTimeStamp, entryIP, entries[index]))
         del prevTimeStamp[:]
-        prevTimeStamp.insert(0, (entryTimeStamp, entryTimeStamp))
+        prevTimeStamp.insert(0, (entryTimeStamp, entryIP))
 
     mycontext['entrieslist'] = entriesRefresh
     mycontext['lock'].release()
