@@ -33,7 +33,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_get(msgheader, sockobj, thiscommhandle)
 
     elif msgheader.startswith( 'POST /Add' ):
-      print 'DEBUG: POST /Add'
       handle_request_add(msgheader, sockobj, thiscommhandle, "POST")
       post_msg_to_all_boards()
 
@@ -42,7 +41,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 
     #Handle a posting vessels new message
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
-      print 'DEBUG: BOARD_UPDATE /Add'
       handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
 
     #Handle a posting vessels deleted message
@@ -56,7 +54,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 # Handles initial GET request from browser, outputs HTML string and closes socket.
 # ------------------------------------------------------------------------------
 def handle_request_get(msgheader, sockobj, thiscommhandle):
-  print 'DEBUG: handle_request_get'
   htmlresponse = generate_html_page("")
   sockobj.send(make_http_ok_response(htmlresponse))
   stopcomm(thiscommhandle)
@@ -66,19 +63,14 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 
-  # Increment logical clock
-
   # Check if request is a new POST or if it is an UPDATE from another board
   # If POST from this node
-
   if request == "POST":
     mycontext['timeStamp'] = mycontext['timeStamp'] + 1
-    print 'DEBUG: POST case in handle_request_add'
     comment = msgheader.split('comment=')[1]
     entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
     # Insert formatted entry in dict
-    print 'DEBUG entries dict:', mycontext['entries']
     mycontext['entries'][mycontext['timeStamp']] = [(mycontext['ip'], entry)]
 
   # If msg from other node
@@ -124,15 +116,10 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 
 #Update rest of the board of the new message
 def post_msg_to_all_boards():
-  print 'DEBUG: post_msg_to_all_boards'
   msg = 'BOARD_UPDATE /Add' + 'entries='
-  print 'Entries dict in post_msg_to_all_boards:', mycontext['entries']
-  
   for key, entriesList in mycontext['entries'].iteritems():
     for entry in entriesList:
       msg += entry[1] + '||'
-      
-  print 'DEBUG: Formatted msg looks like:', msg
 
   vesselIPs = mycontext['iplist']
   for ipaddr in vesselIPs:
@@ -142,7 +129,7 @@ def post_msg_to_all_boards():
 
 #Update rest of the board of the deleted message
 def update_msg_to_all_boards(deletedMsg):
-  print 'DEBUG: update_msg_to_all_boards'
+  deletedMsg = deletedMsg.split('comment=')[1]
   msg = 'BOARD_UPDATE /Change' + 'change=' + deletedMsg
 
   vesselIPs = mycontext['iplist']
@@ -154,12 +141,16 @@ def update_msg_to_all_boards(deletedMsg):
 #Deletes the message from the local board
 #Returns -1 if the delete request arrives before the actual message
 def delete_msg_from_board(timeStamp, ip):
-  entrieslist = mycontext['entries']
 
-  for entryIndex in range(len(entrieslist)):
-    entry = extract_parameters_from_query(entrieslist[entryIndex][2])
-    if timeStamp == int(entry['timeStamp']) and ip == entry['ip']:
-      return mycontext['entries'].pop(entryIndex)
+  deletedMsg = ""
+  for key, entrieslist in mycontext['entries'].iteritems():
+    for entryIndex in xrange(len(entrieslist)):
+      if timeStamp == key and compareIPaddresses(ip, entrieslist[entryIndex][0]) == 0:
+        deletedMsg = mycontext['entries'][key].pop(entryIndex)
+
+    if mycontext['entries'][key] == []:
+      del mycontext['entries'][key]
+      return deletedMsg
 
   mycontext['changeHistory'].append = (timeStamp, ip)
   return -1
@@ -193,7 +184,7 @@ def handle_request_change(msgheader, sockobj, thiscommhandle, request):
     #Send the page
     handle_request_get(msgheader, sockobj, thiscommhandle)
     #update all other boards of the deleted message
-    update_msg_to_all_boards(deletedMsg[2])
+    update_msg_to_all_boards(deletedMsg[1])
 
 # Compares two IP addresses
 def compareIPaddresses(ip1, ip2):
@@ -280,7 +271,6 @@ def entry_to_html(entry):
 # Optional parameter: status.
 # ------------------------------------------------------------------------------
 def generate_html_page(status=""):
-  print 'DEBUG: generate_html_page'
   #Initialize blackboard content
 
   # dynamic title showing Ip address, port and up time.
@@ -289,14 +279,11 @@ def generate_html_page(status=""):
   status_message = "<div class='status'>%s</div>" % (status)
 
   # convert entries to html
-  #entries = [entry_to_html(entry[2]) for entry in mycontext['entries']]
   entriesKeys = mycontext['entries'].keys()
   entriesKeys.sort(reverse=True)
-  print 'Entries keys list after sorting:', entriesKeys
 
   entries = []
   for key in entriesKeys:
-    print 'DEBUG: entry:', mycontext['entries'][key]
     for entry in mycontext['entries'][key]:
       entries.append(entry_to_html(entry[1]))
 
