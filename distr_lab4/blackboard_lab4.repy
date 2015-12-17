@@ -22,15 +22,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     msgheader = sockobj.recv(1024) # Receive message
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-
-      #Try to delete message from history
-      #msgsToDelete = mycontext['changeHistory']
-      #if len(msgsToDelete) > 0:
-       # print msgsToDelete
-        #for msg in msgsToDelete:
-         # delete_msg_from_board(msg[0], msg[1])
-          #mycontext['changeHistory'].remove(msg)
-
       handle_request_get(msgheader, sockobj, thiscommhandle)
 
     elif msgheader.startswith( 'POST /Add' ):
@@ -40,6 +31,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
 
+    #TODO fix into only one BOARD UPDATE
     #Handle a posting vessels new message
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
       board_update(msgheader, sockobj, thiscommhandle)
@@ -74,7 +66,7 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
 
-
+#ONLY NEED SEND BOARD TO ALL
 #Update rest of the board of the new message
 def post_msg_to_all_boards():
   msg = 'BOARD_UPDATE /Add' + 'entries='
@@ -86,10 +78,24 @@ def send_board_to_all_vessels(msg):
       msg += entry[1] + '||'
 
   vesselIPs = mycontext['iplist']
+  counter = 0
   for ipaddr in vesselIPs:
-    socketobject = openconn(ipaddr, mycontext['port'])
-    socketobject.send(msg)
-    socketobject.close()
+    #segmentation with 6 vessels => 2 networks
+    if mycontext['segmentation']:
+      if mycontext['vesselID'] < 3 and counter < 3:
+        socketobject = openconn(ipaddr, mycontext['port'])
+        socketobject.send(msg)
+        socketobject.close()
+      elif mycontext['vesselID'] >= 3 and counter >= 3:
+        socketobject = openconn(ipaddr, mycontext['port'])
+        socketobject.send(msg)
+        socketobject.close()
+      counter += 1
+
+    else:
+      socketobject = openconn(ipaddr, mycontext['port'])
+      socketobject.send(msg)
+      socketobject.close()
 
 #Update rest of the board of the deleted message
 def update_msg_to_all_boards(deletedMsg):
@@ -115,8 +121,8 @@ def delete_msg_from_board(timeStamp, ip):
   return -1
 
 def board_update(msgheader, sockobj, thiscommhandle):
-  #entriesList = mycontext['entries']
-  entriesList = {}
+  entriesList = mycontext['entries']
+  #entriesList = {}
   # Returns list of entries
   entries = msgheader.split('entries=')[1].split('||')
   # len -1 to ignore everything after last '||'
@@ -130,19 +136,18 @@ def board_update(msgheader, sockobj, thiscommhandle):
     entryTimeStamp = int(parameters['timeStamp'])
     entryIP = parameters['ip']
 
+    #TODO refactor continue
     changeHistory = mycontext['changeHistory']
     inChangeHistory = False
     if entryTimeStamp in changeHistory:
-      print "DEBUG: changeHistory"
       for historyIP in changeHistory[entryTimeStamp]:
         if compareIPaddresses(entryIP, historyIP) == 0:
-          print entryIP, ", ", historyIP 
           inChangeHistory = True
           break
 
     if inChangeHistory:
       continue
-    
+
     # If dict key collision, append to collision list and sort
     if entryTimeStamp in entriesList:
       isUnique = True
@@ -300,6 +305,13 @@ def generate_html_page(status=""):
   del entries
   return content
 
+def segmentationSimulation():
+  if mycontext['segmentation']:
+    mycontext['segmentation'] = False
+  else:
+    mycontext['segmentation'] = True
+    settimer(20, segmentationSimulation, [])
+
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
 # and calls start_board() which opens the socket for incoming connections.
@@ -313,10 +325,16 @@ if callfunc == 'initialize':
 
     vesselIPs = []
     ipList = open('iplist.txt', 'r')
+    counter = 0
     for ipaddr in ipList:
       ipaddr = ipaddr.rstrip()
       if not ipaddr == ip:
         vesselIPs.append(ipaddr)
+      else:
+        mycontext['vesselID'] = counter
+        segTimer = settimer(30, segmentationSimulation, [])
+
+      counter += 1
 
     mycontext['iplist'] = vesselIPs
     ipList.close()
@@ -346,6 +364,8 @@ if callfunc == 'initialize':
   #read header and footer html files
   mycontext['headerhtml'] = file("header.html").read()
   mycontext['footerhtml'] = file("footer.html").read()
+  mycontext['segmentation'] = False
+  mycontext['timer'] = segTimer
 
   #Initialize entrieslist to hold future board entries
   mycontext['entries'] = {}
