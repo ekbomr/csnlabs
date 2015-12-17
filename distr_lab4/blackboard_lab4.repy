@@ -29,11 +29,8 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_add(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
-    # Msg from another vessel
     else:
-      #print "Received msg:", msgheader
-      handle_changeList(msgheader, sockobj, thiscommhandle)
-
+      handle_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
     print "Exception in board: %s, %s\n" %(type(e), e)
@@ -47,6 +44,7 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
   stopcomm(thiscommhandle)
 
 def sendChanges(msg):
+  # Stupid hack for local testing
   remotePort = 63101
   if mycontext['port'] == 63101:
     remotePort = 63100
@@ -81,16 +79,16 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   sendChanges(formatChangesString())
 
 
-def handle_changeList(msgheader, sockobj, thiscommhandle):
+def handle_update(msgheader, sockobj, thiscommhandle):
   remoteChanges = disassembleChangesString(msgheader)
   allChanges = combineChangesLists(remoteChanges, mycontext['changes'])
   #print 'Combined changes:', allChanges
 
-  changesToDict(allChanges)
+  convertToDict(allChanges)
 
   print mycontext['boardMessages']
 
-
+# Adds an entry to the list of changes
 def addToChangesList(message, operation):
   ts = mycontext['ts']
   ipOrPort = mycontext['port'] # Port if local, IP if remote
@@ -98,7 +96,7 @@ def addToChangesList(message, operation):
   entry = (operation, ts, ipOrPort, message)
   mycontext['changes'].append(list(entry))
 
-
+# Formats the list of changes into a string to be sent as message
 def formatChangesString():
   changesList = mycontext['changes']
 
@@ -110,7 +108,7 @@ def formatChangesString():
 
   return changesString
 
-
+# Converts formatted message string back to a list
 def disassembleChangesString(changesString):
   changesList = []
 
@@ -124,15 +122,14 @@ def disassembleChangesString(changesString):
 
   return changesList
 
-
+# Combines two lists of changes into one, removing duplicates
 def combineChangesLists(list1, list2):
   combinedList = list1
   combinedList.extend([entry for entry in list2 if entry not in combinedList])
 
   return combinedList
 
-
-def changesToDict(changesList):
+def convertToDict(changesList):
   # [['add', '1', '63100', 'test'], ['add', '2', '63100', 'test2']]
   OP = 0
   SEQ = 1
@@ -142,28 +139,27 @@ def changesToDict(changesList):
   board = mycontext['boardMessages']
 
   for entry in changesList:
-    for attr in entry:
-      seqNr = int(attr[SEQ])
-      port = int(attr[PORT])
-      message = attr[MSG]
-      operation = attr[OP]
+    seqNr = int(entry[SEQ])
+    port = int(entry[PORT])
+    message = entry[MSG]
+    operation = entry[OP]
 
-      if operation == 'add':
-        if int(attr[SEQ]) in board:
-          board[seqNr].append((port, message))
-        else:
-          board[seqNr] = ((port, message))
+    if operation == 'add':
+      if seqNr in board:
+        board[seqNr].append((port, message))
+      else:
+        board[seqNr] = [(port, message)]
 
-      elif operation == 'remove':
-        if len(board[seqNr]) == 1:
-          del board[seqNr]
-        else:
-          index = 0
-          for entry in board[seqNr]:
-            if entry[PORT] == port:
-              board[seqNr].pop(index)
-              break
-            index += 1
+    elif operation == 'remove':
+      if len(board[seqNr]) == 1:
+        del board[seqNr]
+      else:
+        index = 0
+        for entry in board[seqNr]:
+          if entry[PORT] == port:
+            board[seqNr].pop(index)
+            break
+          index += 1
 
 
 # ------------------------------------------------------------------------------
