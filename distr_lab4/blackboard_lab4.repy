@@ -24,7 +24,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-      print "Received GET"
       handle_request_get(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Add' ):
       handle_request_add(msgheader, sockobj, thiscommhandle)
@@ -32,7 +31,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_change(msgheader, sockobj, thiscommhandle)
     # Msg from another vessel
     else:
-      print "Received CHANGES:", msgheader
+      #print "Received msg:", msgheader
       handle_changeList(msgheader, sockobj, thiscommhandle)
 
 
@@ -48,7 +47,10 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
   stopcomm(thiscommhandle)
 
 def sendChanges(msg):
-  socketobject = openconn('127.0.0.1', 63101)
+  remotePort = 63101
+  if mycontext['port'] == 63101:
+    remotePort = 63100
+  socketobject = openconn('127.0.0.1', remotePort)
   socketobject.send(msg)
   socketobject.close()
 
@@ -79,14 +81,18 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   sendChanges(formatChangesString())
 
 
+def handle_changeList(msgheader, sockobj, thiscommhandle):
+  remoteChanges = disassembleChangesString(msgheader)
+  print 'Combined changes:', combineChangesLists(remoteChanges, mycontext['changes'])
+
+
+
 def addToChangesList(message, operation):
   ts = mycontext['ts']
   ipOrPort = mycontext['port'] # Port if local, IP if remote
 
   entry = (operation, ts, ipOrPort, message)
-  mycontext['changes'].append(entry)
-
-  print 'Entry added to list of changes:', entry
+  mycontext['changes'].append(list(entry))
 
 
 def formatChangesString():
@@ -98,32 +104,32 @@ def formatChangesString():
   for entry in changesList:
     changesString += entry[0] + ',' + str(entry[1]) + ',' + str(entry[2]) + ',' + entry[3] + '|'
 
-  print 'changesString:', changesString
   return changesString
+
 
 def disassembleChangesString(changesString):
   changesList = []
-  formattedEntry = []
 
   for entry in changesString.split('|'):
+    formattedEntry = []
     if entry == '':
       continue
     for attribute in entry.split(','):
       formattedEntry.append(attribute)
     changesList.append(formattedEntry)
 
-  print 'changesList after disassembly:', changesList
-
-
-def handle_changeList(msgheader, sockobj, thiscommhandle):
-  disassembleChangesString(msgheader)
+  return changesList
 
 
 def combineChangesLists(list1, list2):
   combinedList = list1
   combinedList.extend([entry for entry in list2 if entry not in combinedList])
-  print combinedList
 
+  return combinedList
+
+
+def changesToDict(list):
+  pass
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
