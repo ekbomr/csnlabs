@@ -22,7 +22,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     msgheader = sockobj.recv(1024) # Receive message
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-      
+
       #Try to delete message from history
       msgsToDelete = mycontext['changeHistory']
       if len(msgsToDelete) > 0:
@@ -33,6 +33,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_get(msgheader, sockobj, thiscommhandle)
 
     elif msgheader.startswith( 'POST /Add' ):
+      print 'DEBUG: POST /Add'
       handle_request_add(msgheader, sockobj, thiscommhandle, "POST")
       post_msg_to_all_boards()
 
@@ -41,6 +42,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 
     #Handle a posting vessels new message
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
+      print 'DEBUG: BOARD_UPDATE /Add'
       handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
 
     #Handle a posting vessels deleted message
@@ -54,6 +56,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 # Handles initial GET request from browser, outputs HTML string and closes socket.
 # ------------------------------------------------------------------------------
 def handle_request_get(msgheader, sockobj, thiscommhandle):
+  print 'DEBUG: handle_request_get'
   htmlresponse = generate_html_page("")
   sockobj.send(make_http_ok_response(htmlresponse))
   stopcomm(thiscommhandle)
@@ -63,47 +66,63 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 
+  # Increment logical clock
   mycontext['timeStamp'] = mycontext['timeStamp'] + 1
-  #check if request is a new POST or if it is an UPDATE from another board
+
+  # Check if request is a new POST or if it is an UPDATE from another board
+  # If POST from this node
+
   if request == "POST":
+    print 'DEBUG: POST case in handle_request_add'
     comment = msgheader.split('comment=')[1]
     entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
-    #mycontext['entrieslist'].insert(0, (mycontext['timeStamp'], mycontext['ip'], entry))
-    mycontext['entrieslist'][mycontext['timeStamp']] = (mycontext['ip'], entry)
 
+    # Insert formatted entry in dict
+    print 'DEBUG entries dict:', mycontext['entries']
+    mycontext['entries'][mycontext['timeStamp']] = (mycontext['ip'], entry)
+
+  # If msg from other node
   elif request == 'BOARD_UPDATE':
-    boardMessages = mycontext['entrieslist']
-    
-    entries = msgheader.split('entries=')[1].split('||')
-    #len -1 to ignore empty array index
-    entriesIndexList = range(len(entries)-1)
-    entriesIndexList.sort(reverse=True)
+    entriesList = mycontext['entries']
 
-    ### SORT_NEW_LIST()
-    for index in entriesIndexList:
-      fullEntry = entries[index]
+    # Returns list of entries
+    entries = msgheader.split('entries=')[1].split('||')
+
+    # len -1 to ignore everything after last '||'
+    nbrOfEntries = range(len(entries)-1)
+
+    # TODO: More intuitive to sort later?
+    nbrOfEntries.sort(reverse=True)
+
+    # Get timestamp and IP to check collisions and sort
+    for entry in nbrOfEntries:
+      fullEntry = entries[entry]
       parameters = extract_parameters_from_query(fullEntry)
-      
+
       entryTimeStamp = int(parameters['timeStamp'])
       entryIP = parameters['ip']
-      if entryTimeStamp in boardMessages:
-        boardMessages[entryTimeStamp].append((entryIP, fullEntry))
-        boardMessages[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
-      
-      else:
-        boardMessages[entryTimeStamp] = [(entryIP, fullEntry)]
 
-    mycontext['entrieslist'] = boardMessages
+      # If dict key collision, append to collision list and sort
+      if entryTimeStamp in entriesList:
+        entriesList[entryTimeStamp].append((entryIP, fullEntry))
+        entriesList[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
+      # If no collision, insert in dict
+      else:
+        entriesList[entryTimeStamp] = [(entryIP, fullEntry)]
+
+    # Update global entries list
+    mycontext['entries'] = entriesList
 
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
 
 #Update rest of the board of the new message
 def post_msg_to_all_boards():
+  print 'DEBUG: post_msg_to_all_boards'
   msg = 'BOARD_UPDATE /Add' + 'entries='
-  for entry in mycontext['entrieslist']:
-    print "post msg:", entry
-    msg += entry[2] + '||' 
+  for entry in mycontext['entries']:
+    print "Appending to msg string:", entry
+    msg += entry[2] + '||'
 
   vesselIPs = mycontext['iplist']
   for ipaddr in vesselIPs:
@@ -124,14 +143,14 @@ def update_msg_to_all_boards(deletedMsg):
 #Deletes the message from the local board
 #Returns -1 if the delete request arrives before the actual message
 def delete_msg_from_board(timeStamp, ip):
-  entrieslist = mycontext['entrieslist']
+  entrieslist = mycontext['entries']
 
   for entryIndex in range(len(entrieslist)):
     entry = extract_parameters_from_query(entrieslist[entryIndex][2])
     if timeStamp == int(entry['timeStamp']) and ip == entry['ip']:
-      return mycontext['entrieslist'].pop(entryIndex)
-  
-  mycontext['changeHistory'].append = (timeStamp, ip)    
+      return mycontext['entries'].pop(entryIndex)
+
+  mycontext['changeHistory'].append = (timeStamp, ip)
   return -1
 
 # ------------------------------------------------------------------------------
@@ -250,6 +269,7 @@ def entry_to_html(entry):
 # Optional parameter: status.
 # ------------------------------------------------------------------------------
 def generate_html_page(status=""):
+  print 'DEBUG: generate_html_page'
   #Initialize blackboard content
 
   # dynamic title showing Ip address, port and up time.
@@ -258,8 +278,17 @@ def generate_html_page(status=""):
   status_message = "<div class='status'>%s</div>" % (status)
 
   # convert entries to html
-  entries = [entry_to_html(entry[2]) for entry in mycontext['entrieslist']]
-  entries = "".join(entries)
+  #entries = [entry_to_html(entry[2]) for entry in mycontext['entries']]
+  entriesKeys = mycontext['entries'].keys()
+  print 'Entries keys list:', entriesKeys
+  entriesKeys.sort()
+
+  entries = []
+  for key in mycontext['entries']:
+    for entry in mycontext['entries'][key]
+    entries.append(entry[2])
+
+  entries = ''.join(entries)
 
   # merging the contents of the board with the title
   # and wrapping all with <div id="boardcontents_placeholder”>...</div>
@@ -318,7 +347,7 @@ if callfunc == 'initialize':
   mycontext['footerhtml'] = file("footer.html").read()
 
   #Initialize entrieslist to hold future board entries
-  mycontext['entrieslist'] = {}
+  mycontext['entries'] = {}
   #Keep track of delete history if the delete request arrives before the message
   mycontext['changeHistory'] = []
 
