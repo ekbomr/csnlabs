@@ -56,8 +56,6 @@ def sendChanges(msg):
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle):
-  print "Received Add"
-
   # Increment logical clock
   mycontext['ts'] = mycontext['ts'] + 1
 
@@ -76,15 +74,19 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
 
   # Add to local list of client-side changes
   addToChangesList(message, 'add')
-  sendChanges(formatChangesString())
+  print mycontext['changes']
 
+  convertToDict(mycontext['changes'])
+  print mycontext['boardMessages']
+
+  sendChanges(formatChangesString())
 
 def handle_update(msgheader, sockobj, thiscommhandle):
   remoteChanges = disassembleChangesString(msgheader)
-  allChanges = combineChangesLists(remoteChanges, mycontext['changes'])
-  #print 'Combined changes:', allChanges
+  mycontext['changes'] = mergeChanges(remoteChanges, mycontext['changes'])
+  print 'Combined changes:', mycontext['changes']
 
-  convertToDict(allChanges)
+  convertToDict(mycontext['changes'])
 
   print mycontext['boardMessages']
 
@@ -93,7 +95,7 @@ def addToChangesList(message, operation):
   ts = mycontext['ts']
   ipOrPort = mycontext['port'] # Port if local, IP if remote
 
-  entry = (operation, ts, ipOrPort, message)
+  entry = (operation, str(ts), str(ipOrPort), message)
   mycontext['changes'].append(list(entry))
 
 # Formats the list of changes into a string to be sent as message
@@ -123,12 +125,13 @@ def disassembleChangesString(changesString):
   return changesList
 
 # Combines two lists of changes into one, removing duplicates
-def combineChangesLists(list1, list2):
+def mergeChanges(list1, list2):
   combinedList = list1
   combinedList.extend([entry for entry in list2 if entry not in combinedList])
 
   return combinedList
 
+# Converts a list of changes to a dict
 def convertToDict(changesList):
   # [['add', '1', '63100', 'test'], ['add', '2', '63100', 'test2']]
   OP = 0
@@ -136,7 +139,8 @@ def convertToDict(changesList):
   PORT = 2
   MSG = 3
 
-  board = mycontext['boardMessages']
+  # Start a fresh board
+  board = {}
 
   for entry in changesList:
     seqNr = int(entry[SEQ])
@@ -161,6 +165,7 @@ def convertToDict(changesList):
             break
           index += 1
 
+  mycontext['boardMessages'] = board
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
