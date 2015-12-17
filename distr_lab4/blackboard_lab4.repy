@@ -30,6 +30,12 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_add(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
+    # Msg from another vessel
+    else:
+      print "Received CHANGES:", msgheader
+      handle_changeList(msgheader, sockobj, thiscommhandle)
+
+
   except Exception, e:
     print "Exception in board: %s, %s\n" %(type(e), e)
     raise
@@ -41,29 +47,75 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
   sockobj.send(make_http_ok_response(htmlresponse))
   stopcomm(thiscommhandle)
 
+def sendChanges(msg):
+  socketobject = openconn('127.0.0.1', 63101)
+  socketobject.send(msg)
+  socketobject.close()
+
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle):
   print "Received Add"
 
-  #increment logical clock
+  # Increment logical clock
   mycontext['ts'] = mycontext['ts'] + 1
 
-  #check if valid request (contains comment)
-  comment=msgheader.split('comment=')[1]
+  # Check if valid request (contains comment)
+  message = msgheader.split('comment=')[1]
 
   # Mark the entry as Add, and store attributes
   # We use the HTML query format to store the entries locally
-  # example:
-  # comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
-  entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (comment, mycontext['ts'], mycontext['ip'], mycontext['port'], 'Add')
+  # example: comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
+  entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (message, mycontext['ts'], mycontext['ip'], mycontext['port'], 'Add')
 
   # Add to local store
   mycontext['entrieslist'].append(entry)
-
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
+
+  # Add to local list of client-side changes
+  addToChangesList(message, 'add')
+  sendChanges(formatChangesString())
+
+
+def addToChangesList(message, operation):
+  ts = mycontext['ts']
+  ipOrPort = mycontext['port'] # Port if local, IP if remote
+
+  entry = (operation, ts, ipOrPort, message)
+  mycontext['changes'].append(entry)
+
+  print 'Entry added to list of changes:', entry
+
+
+def formatChangesString():
+  changesList = mycontext['changes']
+
+  # entry = (operation, ts, ipOrPort, message)
+  # Example: add,1,63100,testing123|remove,1,63101,testing123
+  changesString = ''
+  for entry in changesList:
+    changesString += entry[0] + ',' + str(entry[1]) + ',' + str(entry[2]) + ',' + entry[3] + '|'
+
+  print 'changesString:', changesString
+  return changesString
+
+def disassembleChangesString(changesString):
+  changesList = []
+  formattedEntry = []
+
+  for entry in changesString.split('|'):
+    if entry == '':
+      continue
+    for attribute in entry.split(','):
+      formattedEntry.append(attribute)
+    changesList.append(formattedEntry)
+
+  print 'changesList after disassembly:', changesList
+
+def handle_changeList(msgheader, sockobj, thiscommhandle):
+  disassembleChangesString(msgheader)
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
@@ -94,7 +146,7 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
   entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['ts'], mycontext['ip'], mycontext['port'])
 
   # Add query to local store
-  mycontext['entrieslist'].append(entry)
+  mycontext['changes'].append(entry)
 
   #Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
@@ -219,5 +271,6 @@ if callfunc == 'initialize':
 
   #Initialize entrieslist to hold future board entries
   mycontext['entrieslist'] = []
+  mycontext['changes'] = []
 
   start_board()
