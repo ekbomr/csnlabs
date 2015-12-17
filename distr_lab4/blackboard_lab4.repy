@@ -59,26 +59,18 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Increment logical clock
   mycontext['ts'] = mycontext['ts'] + 1
 
-  # Check if valid request (contains comment)
+  # Get comment from message
   message = msgheader.split('comment=')[1]
-
-  # Mark the entry as Add, and store attributes
-  # We use the HTML query format to store the entries locally
-  # example: comment=aa&src_ts=2&src_ip=127.0.0.1&src_port=63101&action=Add
-  entry = "comment=%s&src_ts=%u&src_ip=%s&src_port=%u&action=%s" % (message, mycontext['ts'], mycontext['ip'], mycontext['port'], 'Add')
-
-  # Add to local store
-  mycontext['entrieslist'].append(entry)
 
   # Add to local list of client-side changes
   changeEntry = addToChangesList(message, 'add')
   print mycontext['changes']
 
-  # Send the page
+  # Update HTML
   handle_request_get(sockobj, thiscommhandle)
 
   convertToDict(mycontext['changes'])
-  print mycontext['boardMessages']
+  #print mycontext['boardMessages']
 
   sendChanges(formatChangesString())
 
@@ -89,10 +81,31 @@ def handle_update(msgheader, sockobj, thiscommhandle):
 
   convertToDict(mycontext['changes'])
 
+  #print mycontext['boardMessages']
+
+  # Update HTML
+  handle_request_get(sockobj, thiscommhandle)
+
+# ------------------------------------------------------------------------------
+# Handles POST /Change request from browser
+# ------------------------------------------------------------------------------
+def handle_request_change(msgheader, sockobj, thiscommhandle):
+  print "Received POST /Change"
+
+  # Get comment from message
+  #message = msgheader.split('comment=')[1]
+
+  # Add to local list of client-side changes
+  changeEntry = addToChangesList('', 'remove')
+  print mycontext['changes']
+
+  convertToDict(mycontext['changes'])
   print mycontext['boardMessages']
 
-  # Send the page
+  # Update HTML
   handle_request_get(sockobj, thiscommhandle)
+
+  sendChanges(formatChangesString())
 
 # Adds an entry to the list of changes and returns the added entry
 def addToChangesList(message, operation):
@@ -173,39 +186,6 @@ def convertToDict(changesList):
 
   mycontext['boardMessages'] = board
 
-# ------------------------------------------------------------------------------
-# Handles POST /Change request from browser
-# ------------------------------------------------------------------------------
-def handle_request_change(msgheader, sockobj, thiscommhandle):
-  print "Received POST /Change"
-
-  #increment logical clock
-  mycontext['ts'] = mycontext['ts'] + 1
-
-  #extract the query from the HTTP request
-  query = extract_http_request_contents(msgheader)
-  # extract the query parameters
-  parameters = extract_parameters_from_query(query)
-  print parameters
-  comment = parameters['comment']
-  action = parameters['action']
-  ref_ts = int(parameters['ts'])
-  ref_ip = parameters['ip']
-  ref_port = int(parameters['port'])
-
-  print comment, action, ref_ts, ref_ip, ref_port
-
-  # Process the query
-  # TODO ...
-
-  # Save the src ip/port and timestamp of the query
-  entry = "%s&src_ts=%u&src_ip=%s&src_port=%u" % (query, mycontext['ts'], mycontext['ip'], mycontext['port'])
-
-  # Add query to local store
-  mycontext['changes'].append(entry)
-
-  #Send the page
-  handle_request_get(msgheader, sockobj, thiscommhandle)
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -279,6 +259,7 @@ def generate_html_page(status=""):
   status_message = "<div class='status'>%s</div>" % (status)
 
   # convert entries to html
+  # TODO: Must get entries from board dict instead of changes!
   entries = [entry_to_html(e) for e in mycontext['changes']]
   entries = "".join(entries)
 
@@ -327,8 +308,6 @@ if callfunc == 'initialize':
   mycontext['headerhtml'] = file("header.html").read()
   mycontext['footerhtml'] = file("footer.html").read()
 
-  #Initialize entrieslist to hold future board entries
-  mycontext['entrieslist'] = []
   mycontext['changes'] = []
   mycontext['boardMessages'] = {}
 
