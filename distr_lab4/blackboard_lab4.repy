@@ -24,28 +24,29 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     if msgheader.startswith( 'GET' ):
 
       #Try to delete message from history
-      msgsToDelete = mycontext['changeHistory']
-      if len(msgsToDelete) > 0:
-        for msg in msgsToDelete:
-          delete_msg_from_board(msg[0], msg[1])
-          mycontext['changeHistory'].remove(msg)
+      #msgsToDelete = mycontext['changeHistory']
+      #if len(msgsToDelete) > 0:
+       # print msgsToDelete
+        #for msg in msgsToDelete:
+         # delete_msg_from_board(msg[0], msg[1])
+          #mycontext['changeHistory'].remove(msg)
 
       handle_request_get(msgheader, sockobj, thiscommhandle)
 
     elif msgheader.startswith( 'POST /Add' ):
-      handle_request_add(msgheader, sockobj, thiscommhandle, "POST")
+      handle_request_add(msgheader, sockobj, thiscommhandle)
       post_msg_to_all_boards()
 
     elif msgheader.startswith( 'POST /Change' ):
-      handle_request_change(msgheader, sockobj, thiscommhandle, "POST")
+      handle_request_change(msgheader, sockobj, thiscommhandle)
 
     #Handle a posting vessels new message
     elif msgheader.startswith( 'BOARD_UPDATE /Add'):
-      handle_request_add(msgheader,sockobj, thiscommhandle, "BOARD_UPDATE")
+      board_update(msgheader, sockobj, thiscommhandle)
 
     #Handle a posting vessels deleted message
     elif msgheader.startswith( 'BOARD_UPDATE /Change'):
-      handle_request_change(msgheader, sockobj, thiscommhandle, "BOARD_UPDATE")
+      board_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
     print "Exception in board: %s, %s\n" %(type(e), e)
@@ -61,62 +62,25 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
-def handle_request_add(msgheader, sockobj, thiscommhandle, request):
-
+def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Check if request is a new POST or if it is an UPDATE from another board
-  # If POST from this node
-  if request == "POST":
-    mycontext['timeStamp'] = mycontext['timeStamp'] + 1
-    comment = msgheader.split('comment=')[1]
-    entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
+  mycontext['timeStamp'] = mycontext['timeStamp'] + 1
+  comment = msgheader.split('comment=')[1]
+  entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
-    # Insert formatted entry in dict
-    mycontext['entries'][mycontext['timeStamp']] = [(mycontext['ip'], entry)]
-
-  # If msg from other node
-  elif request == 'BOARD_UPDATE':
-    entriesList = mycontext['entries']
-
-    # Returns list of entries
-    entries = msgheader.split('entries=')[1].split('||')
-
-    # len -1 to ignore everything after last '||'
-    nbrOfEntries = range(len(entries)-1)
-
-    # Get timestamp and IP to check collisions and sort
-    for entry in nbrOfEntries:
-      fullEntry = entries[entry]
-      parameters = extract_parameters_from_query(fullEntry)
-
-      entryTimeStamp = int(parameters['timeStamp'])
-      entryIP = parameters['ip']
-
-      # If dict key collision, append to collision list and sort
-      if entryTimeStamp in entriesList:
-        isUnique = True
-        for entry in entriesList[entryTimeStamp]:
-          if compareIPaddresses(entryIP, entry[0]) == 0:
-            isUnique = False
-
-        if isUnique:
-          entriesList[entryTimeStamp].append((entryIP, fullEntry))
-          entriesList[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
-      # If no collision, insert in dict
-      else:
-        if entryTimeStamp > mycontext['timeStamp']:
-          mycontext['timeStamp'] = entryTimeStamp
-
-        entriesList[entryTimeStamp] = [(entryIP, fullEntry)]
-
-    # Update global entries list
-    mycontext['entries'] = entriesList
+  # Insert formatted entry in dict
+  mycontext['entries'][mycontext['timeStamp']] = [(mycontext['ip'], entry)]
 
   # Send the page
   handle_request_get(msgheader, sockobj, thiscommhandle)
 
+
 #Update rest of the board of the new message
 def post_msg_to_all_boards():
   msg = 'BOARD_UPDATE /Add' + 'entries='
+  send_board_to_all_vessels(msg)
+
+def send_board_to_all_vessels(msg):
   for key, entriesList in mycontext['entries'].iteritems():
     for entry in entriesList:
       msg += entry[1] + '||'
@@ -129,62 +93,100 @@ def post_msg_to_all_boards():
 
 #Update rest of the board of the deleted message
 def update_msg_to_all_boards(deletedMsg):
-  deletedMsg = deletedMsg.split('comment=')[1]
-  msg = 'BOARD_UPDATE /Change' + 'change=' + deletedMsg
+  msg = 'BOARD_UPDATE /Change' + 'entries='
 
-  vesselIPs = mycontext['iplist']
-  for ipaddr in vesselIPs:
-    socketobject = openconn(ipaddr, mycontext['port'])
-    socketobject.send(msg)
-    socketobject.close()
+  send_board_to_all_vessels(msg)
 
 #Deletes the message from the local board
 #Returns -1 if the delete request arrives before the actual message
 def delete_msg_from_board(timeStamp, ip):
-
   deletedMsg = ""
   for key, entrieslist in mycontext['entries'].iteritems():
     for entryIndex in xrange(len(entrieslist)):
       if timeStamp == key and compareIPaddresses(ip, entrieslist[entryIndex][0]) == 0:
         deletedMsg = mycontext['entries'][key].pop(entryIndex)
+        print "DEBUG deleting msg from local board"
+        mycontext['changeHistory'][timeStamp] = [ip]
 
     if mycontext['entries'][key] == []:
       del mycontext['entries'][key]
       return deletedMsg
 
-  mycontext['changeHistory'].append = (timeStamp, ip)
   return -1
+
+def board_update(msgheader, sockobj, thiscommhandle):
+  #entriesList = mycontext['entries']
+  entriesList = {}
+  # Returns list of entries
+  entries = msgheader.split('entries=')[1].split('||')
+  # len -1 to ignore everything after last '||'
+  nbrOfEntries = range(len(entries)-1)
+
+  # Get timestamp and IP to check collisions and sort
+  for entry in nbrOfEntries:
+    fullEntry = entries[entry]
+    parameters = extract_parameters_from_query(fullEntry)
+
+    entryTimeStamp = int(parameters['timeStamp'])
+    entryIP = parameters['ip']
+
+    changeHistory = mycontext['changeHistory']
+    inChangeHistory = False
+    if entryTimeStamp in changeHistory:
+      print "DEBUG: changeHistory"
+      for historyIP in changeHistory[entryTimeStamp]:
+        if compareIPaddresses(entryIP, historyIP) == 0:
+          print entryIP, ", ", historyIP 
+          inChangeHistory = True
+          break
+
+    if inChangeHistory:
+      continue
+    
+    # If dict key collision, append to collision list and sort
+    if entryTimeStamp in entriesList:
+      isUnique = True
+      for entry in entriesList[entryTimeStamp]:
+        if compareIPaddresses(entryIP, entry[0]) == 0:
+          isUnique = False
+
+      if isUnique:
+        entriesList[entryTimeStamp].append((entryIP, fullEntry))
+        entriesList[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
+    # If no collision, insert in dict
+    else:
+      if entryTimeStamp > mycontext['timeStamp']:
+        mycontext['timeStamp'] = entryTimeStamp
+
+      entriesList[entryTimeStamp] = [(entryIP, fullEntry)]
+
+  # Update global entries list
+  mycontext['entries'] = entriesList
+  handle_request_get(msgheader, sockobj, thiscommhandle)
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
 # ------------------------------------------------------------------------------
-def handle_request_change(msgheader, sockobj, thiscommhandle, request):
-  if request == "BOARD_UPDATE":
+def handle_request_change(msgheader, sockobj, thiscommhandle):
 
-    msgheader = msgheader.split("change=")[1]
-    msg = extract_parameters_from_query(msgheader)
-    deletedMsg = delete_msg_from_board(int(msg['timeStamp']), msg['ip'])
+  #extract the query from the HTTP request
+  query = extract_http_request_contents(msgheader)
+  # extract the query parameters
+  parameters = extract_parameters_from_query(query)
+  #comment = parameters['comment']
+  action = parameters['action']
+  ref_timeStamp = int(parameters['timeStamp'])
+  ref_ip = parameters['ip']
+  #ref_port = int(parameters['port'])
 
-    handle_request_get(msgheader, sockobj, thiscommhandle)
+  if action == "Delete":
+    deletedMsg = delete_msg_from_board(ref_timeStamp, ref_ip)
 
-  else:
-    #extract the query from the HTTP request
-    query = extract_http_request_contents(msgheader)
-    # extract the query parameters
-    parameters = extract_parameters_from_query(query)
-    #comment = parameters['comment']
-    action = parameters['action']
-    ref_timeStamp = int(parameters['timeStamp'])
-    ref_ip = parameters['ip']
-    #ref_port = int(parameters['port'])
-
-    if action == "Delete":
-      deletedMsg = delete_msg_from_board(ref_timeStamp, ref_ip)
-
-    #Send the page
-    handle_request_get(msgheader, sockobj, thiscommhandle)
-    #update all other boards of the deleted message
-    update_msg_to_all_boards(deletedMsg[1])
+  #Send the page
+  handle_request_get(msgheader, sockobj, thiscommhandle)
+  #update all other boards of the deleted message
+  print "about to enter update msg to all boards"
+  update_msg_to_all_boards(deletedMsg[1])
 
 # Compares two IP addresses
 def compareIPaddresses(ip1, ip2):
@@ -348,6 +350,6 @@ if callfunc == 'initialize':
   #Initialize entrieslist to hold future board entries
   mycontext['entries'] = {}
   #Keep track of delete history if the delete request arrives before the message
-  mycontext['changeHistory'] = []
+  mycontext['changeHistory'] = {}
 
   start_board()
