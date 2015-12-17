@@ -114,8 +114,16 @@ def disassembleChangesString(changesString):
 
   print 'changesList after disassembly:', changesList
 
+
 def handle_changeList(msgheader, sockobj, thiscommhandle):
   disassembleChangesString(msgheader)
+
+
+def combineChangesLists(list1, list2):
+  combinedList = list1
+  combinedList.extend([entry for entry in list2 if entry not in combinedList])
+  print combinedList
+
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
