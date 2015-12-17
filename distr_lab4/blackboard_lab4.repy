@@ -67,19 +67,19 @@ def handle_request_get(msgheader, sockobj, thiscommhandle):
 def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 
   # Increment logical clock
-  mycontext['timeStamp'] = mycontext['timeStamp'] + 1
 
   # Check if request is a new POST or if it is an UPDATE from another board
   # If POST from this node
 
   if request == "POST":
+    mycontext['timeStamp'] = mycontext['timeStamp'] + 1
     print 'DEBUG: POST case in handle_request_add'
     comment = msgheader.split('comment=')[1]
     entry = "comment=%s&timeStamp=%u&ip=%s&port=%u&action=%s" % (comment, mycontext['timeStamp'], mycontext['ip'], mycontext['port'], 'Add')
 
     # Insert formatted entry in dict
     print 'DEBUG entries dict:', mycontext['entries']
-    mycontext['entries'][mycontext['timeStamp']] = (mycontext['ip'], entry)
+    mycontext['entries'][mycontext['timeStamp']] = [(mycontext['ip'], entry)]
 
   # If msg from other node
   elif request == 'BOARD_UPDATE':
@@ -91,9 +91,6 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
     # len -1 to ignore everything after last '||'
     nbrOfEntries = range(len(entries)-1)
 
-    # TODO: More intuitive to sort later?
-    nbrOfEntries.sort(reverse=True)
-
     # Get timestamp and IP to check collisions and sort
     for entry in nbrOfEntries:
       fullEntry = entries[entry]
@@ -104,10 +101,19 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 
       # If dict key collision, append to collision list and sort
       if entryTimeStamp in entriesList:
-        entriesList[entryTimeStamp].append((entryIP, fullEntry))
-        entriesList[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
+        isUnique = True
+        for entry in entriesList[entryTimeStamp]:
+          if compareIPaddresses(entryIP, entry[0]) == 0:
+            isUnique = False
+
+        if isUnique:
+          entriesList[entryTimeStamp].append((entryIP, fullEntry))
+          entriesList[entryTimeStamp].sort(cmp=compareIPaddresses, key=getKey)
       # If no collision, insert in dict
       else:
+        if entryTimeStamp > mycontext['timeStamp']:
+          mycontext['timeStamp'] = entryTimeStamp
+
         entriesList[entryTimeStamp] = [(entryIP, fullEntry)]
 
     # Update global entries list
@@ -121,9 +127,11 @@ def post_msg_to_all_boards():
   print 'DEBUG: post_msg_to_all_boards'
   msg = 'BOARD_UPDATE /Add' + 'entries='
   print 'Entries dict in post_msg_to_all_boards:', mycontext['entries']
-  for key, entry in mycontext['entries'].iteritems():
-    #print 'Key, value:', key, entry
-    msg += entry[1] + '||'
+  
+  for key, entriesList in mycontext['entries'].iteritems():
+    for entry in entriesList:
+      msg += entry[1] + '||'
+      
   print 'DEBUG: Formatted msg looks like:', msg
 
   vesselIPs = mycontext['iplist']
@@ -283,13 +291,14 @@ def generate_html_page(status=""):
   # convert entries to html
   #entries = [entry_to_html(entry[2]) for entry in mycontext['entries']]
   entriesKeys = mycontext['entries'].keys()
-  entriesKeys.sort()
+  entriesKeys.sort(reverse=True)
   print 'Entries keys list after sorting:', entriesKeys
 
   entries = []
   for key in entriesKeys:
-    print 'DEBUG: entry:', mycontext['entries']
-    entries.append(entry_to_html(mycontext['entries'][key]))
+    print 'DEBUG: entry:', mycontext['entries'][key]
+    for entry in mycontext['entries'][key]:
+      entries.append(entry_to_html(entry[1]))
 
   entries = ''.join(entries)
 
