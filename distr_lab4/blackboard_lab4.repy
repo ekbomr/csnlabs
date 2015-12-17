@@ -83,8 +83,12 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
 
 def handle_changeList(msgheader, sockobj, thiscommhandle):
   remoteChanges = disassembleChangesString(msgheader)
-  print 'Combined changes:', combineChangesLists(remoteChanges, mycontext['changes'])
+  allChanges = combineChangesLists(remoteChanges, mycontext['changes'])
+  #print 'Combined changes:', allChanges
 
+  changesToDict(allChanges)
+
+  print mycontext['boardMessages']
 
 
 def addToChangesList(message, operation):
@@ -128,8 +132,39 @@ def combineChangesLists(list1, list2):
   return combinedList
 
 
-def changesToDict(list):
-  pass
+def changesToDict(changesList):
+  # [['add', '1', '63100', 'test'], ['add', '2', '63100', 'test2']]
+  OP = 0
+  SEQ = 1
+  PORT = 2
+  MSG = 3
+
+  board = mycontext['boardMessages']
+
+  for entry in changesList:
+    for attr in entry:
+      seqNr = int(attr[SEQ])
+      port = int(attr[PORT])
+      message = attr[MSG]
+      operation = attr[OP]
+
+      if operation == 'add':
+        if int(attr[SEQ]) in board:
+          board[seqNr].append((port, message))
+        else:
+          board[seqNr] = ((port, message))
+
+      elif operation == 'remove':
+        if len(board[seqNr]) == 1:
+          del board[seqNr]
+        else:
+          index = 0
+          for entry in board[seqNr]:
+            if entry[PORT] == port:
+              board[seqNr].pop(index)
+              break
+            index += 1
+
 
 # ------------------------------------------------------------------------------
 # Handles POST /Change request from browser
@@ -286,5 +321,6 @@ if callfunc == 'initialize':
   #Initialize entrieslist to hold future board entries
   mycontext['entrieslist'] = []
   mycontext['changes'] = []
+  mycontext['boardMessages'] = {}
 
   start_board()
