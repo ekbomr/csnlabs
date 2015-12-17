@@ -24,7 +24,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 
     # React depending on message type: HTTP GET or POST, or some other type of communication.
     if msgheader.startswith( 'GET' ):
-      handle_request_get(msgheader, sockobj, thiscommhandle)
+      handle_request_get(sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Add' ):
       handle_request_add(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Change' ):
@@ -38,7 +38,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
 # ------------------------------------------------------------------------------
 # Handles initial GET request from browser, outputs HTML string and closes socket.
 # ------------------------------------------------------------------------------
-def handle_request_get(msgheader, sockobj, thiscommhandle):
+def handle_request_get(sockobj, thiscommhandle):
   htmlresponse = generate_html_page("")
   sockobj.send(make_http_ok_response(htmlresponse))
   stopcomm(thiscommhandle)
@@ -69,12 +69,13 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
 
   # Add to local store
   mycontext['entrieslist'].append(entry)
-  # Send the page
-  handle_request_get(msgheader, sockobj, thiscommhandle)
 
   # Add to local list of client-side changes
-  addToChangesList(message, 'add')
+  changeEntry = addToChangesList(message, 'add')
   print mycontext['changes']
+
+  # Send the page
+  handle_request_get(sockobj, thiscommhandle)
 
   convertToDict(mycontext['changes'])
   print mycontext['boardMessages']
@@ -90,7 +91,10 @@ def handle_update(msgheader, sockobj, thiscommhandle):
 
   print mycontext['boardMessages']
 
-# Adds an entry to the list of changes
+  # Send the page
+  handle_request_get(sockobj, thiscommhandle)
+
+# Adds an entry to the list of changes and returns the added entry
 def addToChangesList(message, operation):
   ts = mycontext['ts']
   ipOrPort = mycontext['port'] # Port if local, IP if remote
@@ -98,11 +102,13 @@ def addToChangesList(message, operation):
   entry = (operation, str(ts), str(ipOrPort), message)
   mycontext['changes'].append(list(entry))
 
+  return entry
+
 # Formats the list of changes into a string to be sent as message
 def formatChangesString():
   changesList = mycontext['changes']
 
-  # entry = (operation, ts, ipOrPort, message)
+  # entry = [operation, ts, ipOrPort, message]
   # Example: add,1,63100,testing123|remove,1,63101,testing123
   changesString = ''
   for entry in changesList:
@@ -225,13 +231,15 @@ def extract_http_request_contents(header):
 # ------------------------------------------------------------------------------
 def extract_parameters_from_query(msg):
   # extract the query parameters as a dictionary: {name:value}
-  # example input format: comment=aa&ts=2&ip=127.0.0.1&port=63101&action=Delete
+  # example input format: [operation, ts, ipOrPort, comment]
+
+  #print 'MSG:', msg
+
   parameters={}
-  arr = msg.split('&')
-  for a in arr:
-    pp = a.split('=')
-    if len(pp)>1:
-      parameters[pp[0]] = pp[1]
+  parameters['comment'] = msg[3]
+  parameters['src_ts'] = msg[1]
+  parameters['src_ip'] = msg[2]
+
   return parameters
 
 # ------------------------------------------------------------------------------
@@ -242,20 +250,20 @@ def entry_to_html(entry):
     # extract the query parameters
     parameters = extract_parameters_from_query(entry)
     comment = parameters['comment']
-    action = parameters['action']
+    #action = parameters['action']
     src_ts = int(parameters['src_ts'])
     src_ip = parameters['src_ip']
-    src_port = int(parameters['src_port'])
+    #src_port = int(parameters['src_port'])
 
-    if action == 'Add':
-      return '''<form class="entry" method="post" action="Change" >
-                  <input type="text" name="comment" value="%s" size="50"/>
-                  <input type="hidden" name="ts" value="%u" />
-                  <input type="hidden" name="ip" value="%s" />
-                  <input type="hidden" name="port" value="%u" />
-                  <input type="submit" name="action" value="Modify" />
-                  <input type="submit" name="action" value="Delete" />
-                </form>''' %(comment, src_ts, src_ip, src_port)
+    #if action == 'Add':
+    return '''<form class="entry" method="post" action="Change" >
+                <input type="text" name="comment" value="%s" size="50"/>
+                <input type="text" name="ts" value="%u" />
+                <input type="text" name="ip" value="%s" />
+                <input type="hidden" name="port" value="%u" />
+                <input type="submit" name="action" value="Modify" />
+                <input type="submit" name="action" value="Delete" />
+              </form>''' %(comment, src_ts, src_ip, 1337)
   return ""
 
 # ------------------------------------------------------------------------------
@@ -271,7 +279,7 @@ def generate_html_page(status=""):
   status_message = "<div class='status'>%s</div>" % (status)
 
   # convert entries to html
-  entries = [entry_to_html(e) for e in mycontext['entrieslist']]
+  entries = [entry_to_html(e) for e in mycontext['changes']]
   entries = "".join(entries)
 
   # merging the contents of the board with the title
