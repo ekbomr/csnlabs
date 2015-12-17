@@ -120,9 +120,10 @@ def handle_request_add(msgheader, sockobj, thiscommhandle, request):
 def post_msg_to_all_boards():
   print 'DEBUG: post_msg_to_all_boards'
   msg = 'BOARD_UPDATE /Add' + 'entries='
-  for entry in mycontext['entries']:
-    print "Appending to msg string:", entry
-    msg += entry[2] + '||'
+  print 'Entries dict in post_msg_to_all_boards:', mycontext['entries']
+  for key, entry in mycontext['entries'].iteritems():
+    print 'Key, value:', key, entry
+    msg += entry[1] + '||'
 
   vesselIPs = mycontext['iplist']
   for ipaddr in vesselIPs:
@@ -132,6 +133,7 @@ def post_msg_to_all_boards():
 
 #Update rest of the board of the deleted message
 def update_msg_to_all_boards(deletedMsg):
+  print 'DEBUG: update_msg_to_all_boards'
   msg = 'BOARD_UPDATE /Change' + 'change=' + deletedMsg
 
   vesselIPs = mycontext['iplist']
@@ -280,13 +282,13 @@ def generate_html_page(status=""):
   # convert entries to html
   #entries = [entry_to_html(entry[2]) for entry in mycontext['entries']]
   entriesKeys = mycontext['entries'].keys()
-  print 'Entries keys list:', entriesKeys
   entriesKeys.sort()
+  print 'Entries keys list after sorting:', entriesKeys
 
   entries = []
   for key in mycontext['entries']:
-    for entry in mycontext['entries'][key]
-    entries.append(entry[2])
+    for entry in mycontext['entries'][key]:
+      entries.append(entry[2])
 
   entries = ''.join(entries)
 
