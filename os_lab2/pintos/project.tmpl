@@ -1,0 +1,198 @@
+			+--------------------+
+			|    EDA092/DIT400   |
+			| LAB ASSIGNMENT 2:  |
+			| 	THREADS      |
+			|   DESIGN DOCUMENT  |
+			+--------------------+
+
+---- GROUP XX ----
+
+>> Fill in the group number, names and email addresses of your group members.
+
+Simon Widlund <wisimon@student.chalmers.se>
+Rikard Ekbom <ekbomr@student.chalmers.se>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			     ALARM CLOCK
+			     ===========
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Added to /src/threads/thread.h:
+	int64_t sleep_ticks
+		- Keeps track of how many ticks until thread wakeup.
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe what happens in a call to timer_sleep(),
+>> including the effects of the timer interrupt handler.
+
+First copy the value of the ticks argument to the sleep_ticks struct member.
+Then we disable external interrupts with a call to intr_disable, to prevent
+the thread_block call from being interrupted by some external event.
+After the thread_block call, we explicitly re-enable external interrupts.
+
+The interrupt handler, called timer_interrupt, increments the global
+tick counter, then it iterates over all threads with thread_foreach, and
+runs our function decr_tick_count on every thread.
+
+decr_tick_count first checks if the thread is blocked, and if the sleep_ticks count is > 0,
+sleep_ticks is decremented, and finally we check if the sleep_ticks has
+reached 0. If it has, we call thread_unblock to unblock the current thread.
+
+After unblocking, the interrupt handler increments the system tick with a call
+to thread_tick.
+
+
+>> A3: What steps are taken to minimize the amount of time spent in
+>> the timer interrupt handler?
+
+The only thing we can realistically optimize is the function that is run
+on each thread. To make this function as fast as possible, we first check
+if the thread is blocked. If it is not, we return immediately.
+
+
+---- SYNCHRONIZATION ----
+
+>> A4: How are race conditions avoided when multiple threads call
+>> timer_sleep() simultaneously?
+
+We avoid them by disabling interrupts before calling thread_block.
+
+>> A5: How are race conditions avoided when a timer interrupt occurs
+>> during a call to timer_sleep()?
+
+Since interrupts are disabled, there can be no race conditions.
+
+---- RATIONALE ----
+
+>> A6: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+We never considered an alternative design. We simply followed the hint in the
+lab PM, and based our solution on that.
+
+			    BATCH SCHEDULING
+			    ================
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, semaphore, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Added to /src/devices/batch-scheduler.c:
+	int tasks = 0;
+		- Keeps track of how many tasks currently on the bus.
+
+	int currDirection = 0;
+		- Current direction of tasks on the bus.
+
+	int queueSend = 0;
+		- How many tasks waiting in the sending end of the bus.
+
+	int queueRecv = 0;
+		- How many tasks waiting in the receiving end of the bus.
+
+	int inQueue[2];
+		- Array with queueSend at position 0 and queueRecv at position 1.
+
+	int queuePrioSend = 0;
+		- How many tasks waiting in the prioritized sending end of the bus.
+
+	int queuePrioRecv = 0;
+		- How many tasks waiting in the prioritized receiving end of the bus.
+
+	int prioQueue[2];
+		- Array with queuePrioSend at position 0 and queuePrioRecv at position 1.
+
+	struct lock lock;
+		- Locking when a task is trying to get on the bus or when leaving a slot on the bus to another task.
+
+	struct condition waitingToSend;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition waitingToRecv;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition* waiting[2];
+		- Array containing conditions waitingToRecv and waitingToSend.
+
+	struct condition waitingSendPrio;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition waitingRecvPrio;
+		- Condiation that puts thread to sleep if bus is full or going in the other direction.
+
+	struct condition* waitingPrio[2];
+		- Array containing conditions waitingRecvPrio and waitingSendPrio.
+
+---- SYNCHRONIZATION ----
+
+>> C1: How does your solution guarantee that no more that 3 tasks
+>> are using the bus in the same direction?
+
+	In our getSlot function the task trying to acquire a bus slot first checks if the global task variable is 3 and if it is then the task is put to sleep in a corresponding condition variable. If there is not 3 tasks currently on the bus and the current direction is the same as the tasks direction then the task takes a slot on the bus and the task variable is incremented.
+
+>> C2: What prevents tasks from opposite directions from using the
+>> bus simultaneously?
+
+	The global variable currDirection keeps track of the current way that tasks are being sent on the bus, so before a task gets a slot on the bus it first checks if the currDirection is the same as the tasks direction, if it is not the same then the task is put in a queue and then put to sleep.
+
+
+>> C3: How does your solution grant priority to high priority tasks over
+>> the waiting tasks in the same direction?
+
+	When a task is done with its work it will then in the leaveSlot function it will first check if there currently are any tasks in the priority queue and if it is then the task will signal that priority task to wake up and take a slot on the bus.
+
+>> C4: How do you guarantee that despite having priority, high priority
+>> tasks do not start using the bus while there are still still using
+>> it in the oposite direction?
+
+	When a task is done and it is leaving the bus slot to another task it first checks if there are any prioritized tasks waiting to get a bus slot. If there are any then it checks if the tasks is in the same direction as the variable currDirection and wakes a waiting task going in the same direction.
+
+---- RATIONALE ----
+
+>> C6: Why did you choose this design? Did you consider other design
+>> alternatives? In what ways is it superior to another design you considered?
+
+We chose this design because it was the easiest to implement. In the end, we
+basically chose the most high-level approach available to us without implmenting
+additional synchronization primitives. We did consider, and even started
+implementing, another design based on using only semaphores. However, we found
+that design to be much harder to implement.
+
+			   SURVEY QUESTIONS (optional)
+			   ===========================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters?
+
+>> Any other comments?
