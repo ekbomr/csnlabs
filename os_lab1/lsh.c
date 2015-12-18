@@ -90,7 +90,9 @@ int main(void){
         else if (strcmp(usrcmd, "cd") == 0) {
           /* If path arg given to cd, navigate there */
           if (cmd.pgm->pgmlist[1]) {
-            chdir(cmd.pgm->pgmlist[1]);
+            if(chdir(cmd.pgm->pgmlist[1]) < 0){
+              printf("No such file or directory\n");
+            }
           }
           /* Else, cd to home dir */
           else {
@@ -123,25 +125,30 @@ int main(void){
               dup2(write_fd, STDOUT_FILENO);
             }
 
-            if (cmd.background) {
+            if (cmd.background == 1) {
               /* Change process group to prevent SIGINT kill bg process */
-              setpgid(pid, 0);
+              setpgid(0, 0);
             }
             execNextPgm(nextPgm);
           }
 
           /* Parent process code */
           else {
-            memset(&sigchld_action, 0, sizeof (sigchld_action));
-            sigchld_action.sa_handler = &clean_up_child_process;
-            sigaction(SIGCHLD, &sigchld_action, NULL);
 
-            if (!cmd.background) {
-              printf("WAITING........");
+            if (cmd.background == 1) {
+              memset(&sigchld_action, 0, sizeof (sigchld_action));
+              sigchld_action.sa_handler = &clean_up_child_process;
+              sigaction(SIGCHLD, &sigchld_action, NULL);
+              continue;
+
+              /*signal(SIGCHLD, clean_up_child_process);
+              continue;*/
+              /*printf("WAITING........");
               if (waitpid(pid, &status, 0) != pid) {
                 printf("Wait error: %s\n", strerror(errno));
-              }
+              }*/
             }
+            wait(NULL);
           }
         }
       }
@@ -210,10 +217,13 @@ void execNextPgm (Pgm *nextPgm) {
 
 /* Clean up the child process. */
 void clean_up_child_process (int signal_number){
-  int status;
+  /*int status;
+  printf("clean_up_child_process before wait\n");
   wait(&status);
-  /* Store its exit status in a global variable. */
-  child_exit_status = status;
+  printf("clean_up_child_process after wait\n");
+  child_exit_status = status;*/
+  /* Store its exit status in a global variable. */ 
+  while(waitpid((pid_t)-1, 0, WNOHANG) > 0){}
 }
 
 /* Intercept SIGINT for the parent to keep the shell from terminating */
