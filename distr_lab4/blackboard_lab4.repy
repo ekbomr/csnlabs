@@ -29,7 +29,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
       handle_request_add(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
-    else:
+    elif msgheader.startswith( 'BOARD_UPDATE' ):
       handle_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
@@ -45,6 +45,7 @@ def handle_request_get(sockobj, thiscommhandle):
 
 def sendChanges(msg):
   # Stupid hack for local testing
+  msg += "BOARD_UPDATE" + msg
   remotePort = 63101
   if mycontext['port'] == 63101:
     remotePort = 63100
@@ -75,7 +76,8 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   sendChanges(formatChangesString())
 
 def handle_update(msgheader, sockobj, thiscommhandle):
-  remoteChanges = disassembleChangesString(msgheader)
+  msg = msgheader.split('BOARD_UPDATE')[1]
+  remoteChanges = disassembleChangesString(msg)
   mycontext['changes'] = mergeChanges(remoteChanges, mycontext['changes'])
   print 'Combined changes:', mycontext['changes']
 
@@ -142,8 +144,15 @@ def disassembleChangesString(changesString):
     formattedEntry = []
     if entry == '':
       continue
+    index = 0 
     for attribute in entry.split(','):
+      if index == 1:
+        if attribute > mycontext['ts']:
+          print "found higher timestamp", attribute
+          mycontext['ts'] = attribute
+
       formattedEntry.append(attribute)
+      index++
     changesList.append(formattedEntry)
 
   return changesList
