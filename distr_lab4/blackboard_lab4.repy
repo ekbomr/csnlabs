@@ -93,10 +93,10 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
   print "Received POST /Change"
 
   # Get comment from message
-  #message = msgheader.split('comment=')[1]
+  message = msgheader.split('comment=')[1]
 
   # Add to local list of client-side changes
-  changeEntry = addToChangesList('', 'remove')
+  changeEntry = addToChangesList(message, 'remove')
   print mycontext['changes']
 
   convertToDict(mycontext['changes'])
@@ -109,7 +109,12 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
 
 # Adds an entry to the list of changes and returns the added entry
 def addToChangesList(message, operation):
-  ts = mycontext['ts']
+  if operation == 'remove':
+    # Get timestamp value from remove message
+    ts = message.split('&')[1].split('=')[1]
+  else:
+    ts = mycontext['ts']
+
   ipOrPort = mycontext['port'] # Port if local, IP if remote
 
   entry = (operation, str(ts), str(ipOrPort), message)
@@ -185,7 +190,6 @@ def convertToDict(changesList):
           index += 1
 
   mycontext['boardMessages'] = board
-
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -282,6 +286,14 @@ if callfunc == 'initialize':
   if len(callargs) == 1:
     port = int(callargs[0])
     ip = getmyip()
+
+    vesselIPs = []
+    ipList = open('iplist.txt', 'r')
+    for ipaddr in ipList:
+      vesselIPs.append(ipaddr.rstrip())
+
+    mycontext['iplist'] = vesselIPs
+    ipList.close()
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
