@@ -34,7 +34,6 @@ int done = 0;
 
 pid_t pid;
 int status;
-sig_atomic_t child_exit_status;
 struct sigaction sigchld_action, sigint_action;
 
 /*
@@ -125,7 +124,7 @@ int main(void){
               dup2(write_fd, STDOUT_FILENO);
             }
 
-            if (cmd.background == 1) {
+            if (cmd.background) {
               /* Change process group to prevent SIGINT kill bg process */
               setpgid(0, 0);
             }
@@ -135,20 +134,14 @@ int main(void){
           /* Parent process code */
           else {
 
-            if (cmd.background == 1) {
+            if (!cmd.background) {
+              wait(NULL);
+            }
+            else{
               memset(&sigchld_action, 0, sizeof (sigchld_action));
               sigchld_action.sa_handler = &clean_up_child_process;
               sigaction(SIGCHLD, &sigchld_action, NULL);
-              continue;
-
-              /*signal(SIGCHLD, clean_up_child_process);
-              continue;*/
-              /*printf("WAITING........");
-              if (waitpid(pid, &status, 0) != pid) {
-                printf("Wait error: %s\n", strerror(errno));
-              }*/
             }
-            wait(NULL);
           }
         }
       }
@@ -217,12 +210,6 @@ void execNextPgm (Pgm *nextPgm) {
 
 /* Clean up the child process. */
 void clean_up_child_process (int signal_number){
-  /*int status;
-  printf("clean_up_child_process before wait\n");
-  wait(&status);
-  printf("clean_up_child_process after wait\n");
-  child_exit_status = status;*/
-  /* Store its exit status in a global variable. */ 
   while(waitpid((pid_t)-1, 0, WNOHANG) > 0){}
 }
 
