@@ -30,6 +30,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'BOARD_UPDATE' ):
+      print "UPDATE"
       handle_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
@@ -45,7 +46,7 @@ def handle_request_get(sockobj, thiscommhandle):
 
 def sendChanges(msg):
   # Stupid hack for local testing
-  msg += "BOARD_UPDATE" + msg
+  msg = "BOARD_UPDATE" + msg
   remotePort = 63101
   if mycontext['port'] == 63101:
     remotePort = 63100
@@ -65,13 +66,13 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
 
   # Add to local list of client-side changes
   changeEntry = addToChangesList(message, 'add')
-  print mycontext['changes']
+  #print mycontext['changes']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
 
   convertToDict(mycontext['changes'])
-  #print mycontext['boardMessages']
+  print mycontext['boardMessages']
 
   sendChanges(formatChangesString())
 
@@ -79,11 +80,11 @@ def handle_update(msgheader, sockobj, thiscommhandle):
   msg = msgheader.split('BOARD_UPDATE')[1]
   remoteChanges = disassembleChangesString(msg)
   mycontext['changes'] = mergeChanges(remoteChanges, mycontext['changes'])
-  print 'Combined changes:', mycontext['changes']
+  #print 'Combined changes:', mycontext['changes']
 
   convertToDict(mycontext['changes'])
 
-  #print mycontext['boardMessages']
+  print mycontext['boardMessages']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
@@ -99,7 +100,7 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
 
   # Add to local list of client-side changes
   changeEntry = addToChangesList(message, 'remove')
-  print mycontext['changes']
+  #print mycontext['changes']
 
   convertToDict(mycontext['changes'])
   print mycontext['boardMessages']
@@ -144,15 +145,15 @@ def disassembleChangesString(changesString):
     formattedEntry = []
     if entry == '':
       continue
-    index = 0 
+    index = 0
     for attribute in entry.split(','):
       if index == 1:
         if attribute > mycontext['ts']:
           print "found higher timestamp", attribute
-          mycontext['ts'] = attribute
+          mycontext['ts'] = int(attribute)
 
       formattedEntry.append(attribute)
-      index++
+      index += 1
     changesList.append(formattedEntry)
 
   return changesList
