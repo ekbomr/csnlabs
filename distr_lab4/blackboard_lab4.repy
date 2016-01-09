@@ -13,7 +13,6 @@ def start_board():
   except Exception, e:
     print "Exception in start_board: %s, %s\n" %(type(e), e)
     raise
-    #pass
 
 # ------------------------------------------------------------------------------
 # Called when an incoming message is received.
@@ -66,12 +65,12 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
 
   # Add to local list of client-side changes
   changeEntry = addToChangesList(message, 'add')
-  #print mycontext['changes']
+
+  convertToDict(mycontext['changes'])
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
 
-  convertToDict(mycontext['changes'])
   print mycontext['boardMessages']
 
   sendChanges(formatChangesString())
@@ -149,7 +148,7 @@ def disassembleChangesString(changesString):
     for attribute in entry.split(','):
       if index == 1:
         if attribute > mycontext['ts']:
-          print "found higher timestamp", attribute
+          #print "found higher timestamp", attribute
           mycontext['ts'] = int(attribute)
 
       formattedEntry.append(attribute)
@@ -167,6 +166,7 @@ def mergeChanges(list1, list2):
 
 # Converts a list of changes to a dict
 def convertToDict(changesList):
+  # changesList example:
   # [['add', '1', '63100', 'test'], ['add', '2', '63100', 'test2']]
   OP = 0
   SEQ = 1
@@ -223,33 +223,30 @@ def extract_http_request_contents(header):
 # ------------------------------------------------------------------------------
 # Utility function to extract query parameter from HTML query
 # ------------------------------------------------------------------------------
-def extract_parameters_from_query(msg):
-  # extract the query parameters as a dictionary: {name:value}
-  # example input format: [operation, ts, ipOrPort, comment]
-
-  #print 'MSG:', msg
+def extract_parameters_from_query(timeStamp, msg):
+  print 'extracting from:', msg
 
   parameters={}
-  parameters['comment'] = msg[3]
-  parameters['src_ts'] = msg[1]
-  parameters['src_ip'] = msg[2]
+  parameters['src_ip'] = msg[0]
+  parameters['comment'] = msg[1]
+  parameters['src_ts'] = timeStamp
 
+  #print 'parameter dict: ' + str(parameters)
   return parameters
 
 # ------------------------------------------------------------------------------
 # Utility function to wrap an entry with HTML form markup
 # ------------------------------------------------------------------------------
-def entry_to_html(entry):
+def entry_to_html(timeStamp, entry):
   if len(entry) > 0:
     # extract the query parameters
-    parameters = extract_parameters_from_query(entry)
+    parameters = extract_parameters_from_query(timeStamp, entry)
     comment = parameters['comment']
     #action = parameters['action']
     src_ts = int(parameters['src_ts'])
     src_ip = parameters['src_ip']
     #src_port = int(parameters['src_port'])
 
-    #if action == 'Add':
     return '''<form class="entry" method="post" action="Change" >
                 <input type="text" name="comment" value="%s" size="50"/>
                 <input type="text" name="ts" value="%u" />
@@ -274,7 +271,12 @@ def generate_html_page(status=""):
 
   # convert entries to html
   # TODO: Must get entries from board dict instead of changes!
-  entries = [entry_to_html(e) for e in mycontext['changes']]
+  entries = []
+
+  for timeStamp, entriesList in mycontext['boardMessages'].iteritems():
+    for entry in entriesList:
+      entries.append(entry_to_html(timeStamp, entry))
+
   entries = "".join(entries)
 
   # merging the contents of the board with the title
