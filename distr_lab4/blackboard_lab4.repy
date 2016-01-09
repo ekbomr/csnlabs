@@ -29,7 +29,7 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'BOARD_UPDATE' ):
-      print "UPDATE"
+      #print "UPDATE"
       handle_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
@@ -44,15 +44,16 @@ def handle_request_get(sockobj, thiscommhandle):
   stopcomm(thiscommhandle)
 
 def sendChanges(msg):
-  # Stupid hack for local testing
   msg = "BOARD_UPDATE" + msg
-  remotePort = 63101
-  if mycontext['port'] == 63101:
-    remotePort = 63100
-  socketobject = openconn('127.0.0.1', remotePort)
-  socketobject.send(msg)
-  socketobject.close()
 
+  for ip in mycontext['ipList']:
+    try:
+      socketobject = openconn(ip, mycontext['port'])
+      socketobject.send(msg)
+      socketobject.close()
+    except Exception, e:
+      print "Error when sending changes: %s, %s\n" %(type(e), e)
+      raise
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
@@ -71,7 +72,7 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
 
-  print mycontext['boardMessages']
+  #print mycontext['boardMessages']
 
   sendChanges(formatChangesString())
 
@@ -83,7 +84,7 @@ def handle_update(msgheader, sockobj, thiscommhandle):
 
   convertToDict(mycontext['changes'])
 
-  print mycontext['boardMessages']
+  #print mycontext['boardMessages']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
@@ -92,7 +93,7 @@ def handle_update(msgheader, sockobj, thiscommhandle):
 # Handles POST /Change request from browser
 # ------------------------------------------------------------------------------
 def handle_request_change(msgheader, sockobj, thiscommhandle):
-  print "Received POST /Change"
+  #print "Received POST /Change"
 
   # Get comment from message
   message = msgheader.split('comment=')[1]
@@ -102,7 +103,7 @@ def handle_request_change(msgheader, sockobj, thiscommhandle):
   #print mycontext['changes']
 
   convertToDict(mycontext['changes'])
-  print mycontext['boardMessages']
+  #print mycontext['boardMessages']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
@@ -224,7 +225,7 @@ def extract_http_request_contents(header):
 # Utility function to extract query parameter from HTML query
 # ------------------------------------------------------------------------------
 def extract_parameters_from_query(timeStamp, msg):
-  print 'extracting from:', msg
+  #print 'extracting from:', msg
 
   parameters={}
   parameters['src_ip'] = msg[0]
@@ -297,15 +298,16 @@ if callfunc == 'initialize':
   # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
   if len(callargs) == 1:
     port = int(callargs[0])
-    ip = getmyip()
+    myIp = getmyip()
 
     vesselIPs = []
     ipList = open('iplist.txt', 'r')
-    for ipaddr in ipList:
-      vesselIPs.append(ipaddr.rstrip())
-
-    mycontext['iplist'] = vesselIPs
+    vesselIPs = [ip.rstrip() for ip in ipList if ip != myIp]
     ipList.close()
+
+    print vesselIPs
+
+    mycontext['ipList'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
@@ -326,7 +328,7 @@ if callfunc == 'initialize':
 
   #Initialize Port and IP
   mycontext['port'] = port
-  mycontext['ip'] = ip
+  mycontext['ip'] = myIp
 
   #read header and footer html files
   mycontext['headerhtml'] = file("header.html").read()
