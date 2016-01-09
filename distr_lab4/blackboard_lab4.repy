@@ -47,13 +47,14 @@ def sendChanges(msg):
   msg = "BOARD_UPDATE" + msg
 
   for ip in mycontext['ipList']:
-    try:
-      socketobject = openconn(ip, mycontext['port'])
-      socketobject.send(msg)
-      socketobject.close()
-    except Exception, e:
-      print "Error when sending changes: %s, %s\n" %(type(e), e)
-      raise
+    if ip != mycontext['ip']:
+      try:
+        socketobject = openconn(ip, mycontext['port'])
+        socketobject.send(msg)
+        socketobject.close()
+      except Exception, e:
+        print "Error when sending changes: %s, %s\n" %(type(e), e)
+        raise
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
@@ -118,7 +119,7 @@ def addToChangesList(message, operation):
   else:
     ts = mycontext['ts']
 
-  ipOrPort = mycontext['port'] # Port if local, IP if remote
+  ipOrPort = mycontext['ip'] # Port if local, IP if remote
 
   entry = (operation, str(ts), str(ipOrPort), message)
   mycontext['changes'].append(list(entry))
@@ -171,7 +172,7 @@ def convertToDict(changesList):
   # [['add', '1', '63100', 'test'], ['add', '2', '63100', 'test2']]
   OP = 0
   SEQ = 1
-  PORT = 2
+  IP = 2
   MSG = 3
 
   # Start a fresh board
@@ -179,7 +180,7 @@ def convertToDict(changesList):
 
   for entry in changesList:
     seqNr = int(entry[SEQ])
-    port = int(entry[PORT])
+    port = entry[IP]
     message = entry[MSG]
     operation = entry[OP]
 
@@ -190,16 +191,19 @@ def convertToDict(changesList):
         board[seqNr] = [(port, message)]
 
     elif operation == 'remove':
-      if len(board[seqNr]) == 1:
-        del board[seqNr]
-      else:
-        index = 0
-        for entry in board[seqNr]:
-          if entry[PORT] == port:
-            board[seqNr].pop(index)
-            break
-          index += 1
+      # Make sure it hasn't already been deleted
+      if seqNr in board:
+        if len(board[seqNr]) == 1:
+          del board[seqNr]
+        else:
+          index = 0
+          for entry in board[seqNr]:
+            if entry[IP] == port:
+              board[seqNr].pop(index)
+              break
+            index += 1
 
+  print board
   mycontext['boardMessages'] = board
 
 # ------------------------------------------------------------------------------
@@ -252,10 +256,9 @@ def entry_to_html(timeStamp, entry):
                 <input type="text" name="comment" value="%s" size="50"/>
                 <input type="text" name="ts" value="%u" />
                 <input type="text" name="ip" value="%s" />
-                <input type="hidden" name="port" value="%u" />
                 <input type="submit" name="action" value="Modify" />
                 <input type="submit" name="action" value="Delete" />
-              </form>''' %(comment, src_ts, src_ip, 1337)
+              </form>''' %(comment, src_ts, src_ip)
   return ""
 
 # ------------------------------------------------------------------------------
@@ -268,10 +271,10 @@ def generate_html_page(status=""):
   # dynamic title showing Ip address, port and up time.
   board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['ip'], mycontext['port'], int(getruntime()))
   # An optional status message
-  status_message = "<div class='status'>%s</div>" % (status)
+  status = 'Segmented: ' + str(mycontext['segmented']) + '<br>' + str(mycontext['ipList'])
+  status_message = "<div class='status'>%s</div>" % status
 
   # convert entries to html
-  # TODO: Must get entries from board dict instead of changes!
   entries = []
 
   for timeStamp, entriesList in mycontext['boardMessages'].iteritems():
@@ -289,6 +292,33 @@ def generate_html_page(status=""):
   del entries
   return content
 
+def toggleSegmentation():
+  segmented = mycontext['segmented']
+
+  if segmented:
+    mycontext['segmented'] = False
+    print "Merging..."
+
+    mycontext['ipList'] = mycontext['ipList'] + mycontext['ipList2']
+    print mycontext['ipList']
+
+  else:
+    ipList = mycontext['ipList']
+    mycontext['ipList2'] = []
+    mycontext['segmented'] = True
+    print "Segmenting..."
+
+    # Split ipList in half
+    networkA = ipList[:len(ipList)/2]
+    networkB = ipList[len(ipList)/2:]
+    mycontext['ipList'] = networkA
+    mycontext['ipList2'] = networkB
+
+    # Choose which ipList to use
+    if mycontext['ip'] in networkB:
+      mycontext['ipList'] = networkB
+
+
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
 # and calls start_board() which opens the socket for incoming connections.
@@ -302,10 +332,8 @@ if callfunc == 'initialize':
 
     vesselIPs = []
     ipList = open('iplist.txt', 'r')
-    vesselIPs = [ip.rstrip() for ip in ipList if ip != myIp]
+    vesselIPs = [ip.rstrip() for ip in ipList]
     ipList.close()
-
-    print vesselIPs
 
     mycontext['ipList'] = vesselIPs
 
@@ -336,5 +364,13 @@ if callfunc == 'initialize':
 
   mycontext['changes'] = []
   mycontext['boardMessages'] = {}
+  mycontext['segmented'] = False
 
   start_board()
+
+  #settimer(15, toggleSegmentation, [])
+  #settimer(30, toggleSegmentation, [])
+
+  #Sets a timer that when it expires will start a new thread to call a function with a set of arguments. The thread is charged to your program when you set the timer (instead of when the timer fires). This function returns a timer handle that may be used to cancel the timer before the thread is started.
+
+  #settimer(waittime, fun, args)
