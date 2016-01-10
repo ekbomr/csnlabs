@@ -29,7 +29,6 @@ def board(ip, port, sockobj, thiscommhandle, listencommhandle):
     elif msgheader.startswith( 'POST /Change' ):
       handle_request_change(msgheader, sockobj, thiscommhandle)
     elif msgheader.startswith( 'BOARD_UPDATE' ):
-      #print "UPDATE"
       handle_update(msgheader, sockobj, thiscommhandle)
 
   except Exception, e:
@@ -47,31 +46,32 @@ def sendChanges(msg):
   msg = "BOARD_UPDATE" + msg
   vesselIPs = mycontext['ipList']
   counter = 0
-  VESSELS = 4
+  VESSELS = mycontext['vesselCount']
 
   for ip in vesselIPs:
-    if ip != mycontext['ip']:
+    if mycontext['ip'] != ip:
       try:
-        #segmentation with 6 vessels => 2 networks
         if mycontext['segmented']:
+          #segmented network with the first half IPs in the ipList
           if mycontext['vesselID'] < VESSELS/2 and counter < VESSELS/2:
-            socketobject = openconn(ipaddr, mycontext['port'])
+            socketobject = openconn(ip, mycontext['port'])
             socketobject.send(msg)
             socketobject.close()
+
+          #segmented network with the second half IPs in the ipList
           elif mycontext['vesselID'] >= VESSELS/2 and counter >= VESSELS/2:
-            socketobject = openconn(ipaddr, mycontext['port'])
+            socketobject = openconn(ip, mycontext['port'])
             socketobject.send(msg)
             socketobject.close()
-            counter += 1
+        
         else:
           socketobject = openconn(ip, mycontext['port'])
           socketobject.send(msg)
           socketobject.close()
       except Exception, e:
         print "Error when sending changes: %s, %s\n" %(type(e), e)
-        raise
 
-
+    counter += 1
 
 
 # ------------------------------------------------------------------------------
@@ -79,7 +79,9 @@ def sendChanges(msg):
 # ------------------------------------------------------------------------------
 def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Increment logical clock
+  mycontext['lock'].acquire()
   mycontext['ts'] = mycontext['ts'] + 1
+  mycontext['lock'].release()
 
   # Get comment from message
   message = msgheader.split('comment=')[1]
@@ -92,19 +94,17 @@ def handle_request_add(msgheader, sockobj, thiscommhandle):
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
 
-  #print mycontext['boardMessages']
-
   sendChanges(formatChangesString())
 
 def handle_update(msgheader, sockobj, thiscommhandle):
   msg = msgheader.split('BOARD_UPDATE')[1]
   remoteChanges = disassembleChangesString(msg)
+
+  mycontext['lock'].acquire()
   mycontext['changes'] = mergeChanges(remoteChanges, mycontext['changes'])
-  #print 'Combined changes:', mycontext['changes']
+  mycontext['lock'].release()
 
   convertToDict(mycontext['changes'])
-
-  #print mycontext['boardMessages']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
@@ -113,17 +113,14 @@ def handle_update(msgheader, sockobj, thiscommhandle):
 # Handles POST /Change request from browser
 # ------------------------------------------------------------------------------
 def handle_request_change(msgheader, sockobj, thiscommhandle):
-  #print "Received POST /Change"
 
   # Get comment from message
   message = msgheader.split('comment=')[1]
 
   # Add to local list of client-side changes
   changeEntry = addToChangesList(message, 'remove')
-  #print mycontext['changes']
 
   convertToDict(mycontext['changes'])
-  #print mycontext['boardMessages']
 
   # Update HTML
   handle_request_get(sockobj, thiscommhandle)
@@ -141,7 +138,9 @@ def addToChangesList(message, operation):
   ipOrPort = mycontext['ip'] # Port if local, IP if remote
 
   entry = (operation, str(ts), str(ipOrPort), message)
+  mycontext['lock'].acquire()
   mycontext['changes'].append(list(entry))
+  mycontext['lock'].release()
 
   return entry
 
@@ -149,7 +148,6 @@ def addToChangesList(message, operation):
 def formatChangesString():
   changesList = mycontext['changes']
 
-  # entry = [operation, ts, ipOrPort, message]
   # Example: add,1,63100,testing123|remove,1,63101,testing123
   changesString = ''
   for entry in changesList:
@@ -168,9 +166,10 @@ def disassembleChangesString(changesString):
     index = 0
     for attribute in entry.split(','):
       if index == 1:
-        if attribute > mycontext['ts']:
-          #print "found higher timestamp", attribute
+        if int(attribute) > mycontext['ts']:
+          mycontext['lock'].acquire()
           mycontext['ts'] = int(attribute)
+          mycontext['lock'].release()
 
       formattedEntry.append(attribute)
       index += 1
@@ -223,7 +222,9 @@ def convertToDict(changesList):
             index += 1
 
   print board
+  mycontext['lock'].acquire()
   mycontext['boardMessages'] = board
+  mycontext['lock'].release()
 
 # ------------------------------------------------------------------------------
 # Wrap into HTTP headers
@@ -248,14 +249,11 @@ def extract_http_request_contents(header):
 # Utility function to extract query parameter from HTML query
 # ------------------------------------------------------------------------------
 def extract_parameters_from_query(timeStamp, msg):
-  #print 'extracting from:', msg
-
-  parameters={}
+  parameters= {}
   parameters['src_ip'] = msg[0]
   parameters['comment'] = msg[1]
   parameters['src_ts'] = timeStamp
 
-  #print 'parameter dict: ' + str(parameters)
   return parameters
 
 # ------------------------------------------------------------------------------
@@ -266,10 +264,8 @@ def entry_to_html(timeStamp, entry):
     # extract the query parameters
     parameters = extract_parameters_from_query(timeStamp, entry)
     comment = parameters['comment']
-    #action = parameters['action']
     src_ts = int(parameters['src_ts'])
     src_ip = parameters['src_ip']
-    #src_port = int(parameters['src_port'])
 
     return '''<form class="entry" method="post" action="Change" >
                 <input type="text" name="comment" value="%s" size="50"/>
@@ -290,12 +286,11 @@ def generate_html_page(status=""):
   # dynamic title showing Ip address, port and up time.
   board_title = '<div id="boardtitle_placeholder" class="boardtitle">Board contents at host: %s:%u, up time: %u sec.</div>' %(mycontext['ip'], mycontext['port'], int(getruntime()))
   # An optional status message
-  status = 'Segmented: ' + str(mycontext['segmented']) + '<br>' + str(mycontext['ipList'])
+  #status = 'Segmented: ' + str(mycontext['segmented']) + '<br>' + str(mycontext['vesselID'])
   status_message = "<div class='status'>%s</div>" % status
 
-  # convert entries to html
+  # Get all board messages and convert into html friendly string
   entries = []
-
   for timeStamp, entriesList in mycontext['boardMessages'].iteritems():
     for entry in entriesList:
       entries.append(entry_to_html(timeStamp, entry))
@@ -311,32 +306,7 @@ def generate_html_page(status=""):
   del entries
   return content
 
-# def toggleSegmentation():
-#   segmented = mycontext['segmented']
-#
-#   if segmented:
-#     mycontext['segmented'] = False
-#     print "Merging..."
-#
-#     mycontext['ipList'] = mycontext['ipList'] + mycontext['ipList2']
-#     print mycontext['ipList']
-#
-#   else:
-#     ipList = mycontext['ipList']
-#     mycontext['ipList2'] = []
-#     mycontext['segmented'] = True
-#     print "Segmenting..."
-#
-#     # Split ipList in half
-#     networkA = ipList[:len(ipList)/2]
-#     networkB = ipList[len(ipList)/2:]
-#     mycontext['ipList'] = networkA
-#     mycontext['ipList2'] = networkB
-#
-#     # Choose which ipList to use
-#     if mycontext['ip'] in networkB:
-#       mycontext['ipList'] = networkB
-
+# Simulate segmentation task
 def toggleSegmentation():
   if mycontext['segmented']:
     mycontext['segmented'] = False
@@ -350,16 +320,6 @@ def toggleSegmentation():
 if callfunc == 'initialize':
   # Running remotely (assuming that we pass one input argument only when we run remotely):
   # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
-  # if len(callargs) == 1:
-  #   port = int(callargs[0])
-  #   myIp = getmyip()
-  #
-  #   vesselIPs = []
-  #   ipList = open('iplist.txt', 'r')
-  #   vesselIPs = [ip.rstrip() for ip in ipList]
-  #   ipList.close()
-  #
-  #   mycontext['ipList'] = vesselIPs
 
   if len(callargs) == 1:
     port = int(callargs[0])
@@ -370,13 +330,14 @@ if callfunc == 'initialize':
     counter = 0
     for ipaddr in ipList:
       ipaddr = ipaddr.rstrip()
-      if not ipaddr == ip:
-        vesselIPs.append(ipaddr)
-      else:
+      if ipaddr == ip:
         mycontext['vesselID'] = counter
+
+      vesselIPs.append(ipaddr)
       counter += 1
 
     ipList.close()
+    mycontext['vesselCount'] = counter
     mycontext['ipList'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
@@ -395,6 +356,7 @@ if callfunc == 'initialize':
 
   #logical clock\timestamp
   mycontext['ts'] = 0
+  mycontext['lock'] = getlock()
 
   #Initialize Port and IP
   mycontext['port'] = port
@@ -410,9 +372,7 @@ if callfunc == 'initialize':
 
   start_board()
 
+  # Segmentation simulation
   #settimer(15, toggleSegmentation, [])
   #settimer(30, toggleSegmentation, [])
 
-  #Sets a timer that when it expires will start a new thread to call a function with a set of arguments. The thread is charged to your program when you set the timer (instead of when the timer fires). This function returns a timer handle that may be used to cancel the timer before the thread is started.
-
-  #settimer(waittime, fun, args)
