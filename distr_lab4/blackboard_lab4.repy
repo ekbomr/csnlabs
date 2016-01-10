@@ -45,16 +45,35 @@ def handle_request_get(sockobj, thiscommhandle):
 
 def sendChanges(msg):
   msg = "BOARD_UPDATE" + msg
+  vesselIPs = mycontext['ipList']
+  counter = 0
+  VESSELS = 4
 
-  for ip in mycontext['ipList']:
+  for ip in vesselIPs:
     if ip != mycontext['ip']:
       try:
-        socketobject = openconn(ip, mycontext['port'])
-        socketobject.send(msg)
-        socketobject.close()
+        #segmentation with 6 vessels => 2 networks
+        if mycontext['segmentation']:
+          if mycontext['vesselID'] < 3 and counter < 3:
+            socketobject = openconn(ipaddr, mycontext['port'])
+            socketobject.send(msg)
+            socketobject.close()
+          elif mycontext['vesselID'] >= 3 and counter >= 3:
+            socketobject = openconn(ipaddr, mycontext['port'])
+            socketobject.send(msg)
+            socketobject.close()
+            counter += 1
+        else:
+          socketobject = openconn(ip, mycontext['port'])
+          socketobject.send(msg)
+          socketobject.close()
       except Exception, e:
         print "Error when sending changes: %s, %s\n" %(type(e), e)
         raise
+
+
+
+
 # ------------------------------------------------------------------------------
 # Handles POST \Add request from browser
 # ------------------------------------------------------------------------------
@@ -292,32 +311,37 @@ def generate_html_page(status=""):
   del entries
   return content
 
+# def toggleSegmentation():
+#   segmented = mycontext['segmented']
+#
+#   if segmented:
+#     mycontext['segmented'] = False
+#     print "Merging..."
+#
+#     mycontext['ipList'] = mycontext['ipList'] + mycontext['ipList2']
+#     print mycontext['ipList']
+#
+#   else:
+#     ipList = mycontext['ipList']
+#     mycontext['ipList2'] = []
+#     mycontext['segmented'] = True
+#     print "Segmenting..."
+#
+#     # Split ipList in half
+#     networkA = ipList[:len(ipList)/2]
+#     networkB = ipList[len(ipList)/2:]
+#     mycontext['ipList'] = networkA
+#     mycontext['ipList2'] = networkB
+#
+#     # Choose which ipList to use
+#     if mycontext['ip'] in networkB:
+#       mycontext['ipList'] = networkB
+
 def toggleSegmentation():
-  segmented = mycontext['segmented']
-
-  if segmented:
+  if mycontext['segmented']:
     mycontext['segmented'] = False
-    print "Merging..."
-
-    mycontext['ipList'] = mycontext['ipList'] + mycontext['ipList2']
-    print mycontext['ipList']
-
   else:
-    ipList = mycontext['ipList']
-    mycontext['ipList2'] = []
     mycontext['segmented'] = True
-    print "Segmenting..."
-
-    # Split ipList in half
-    networkA = ipList[:len(ipList)/2]
-    networkB = ipList[len(ipList)/2:]
-    mycontext['ipList'] = networkA
-    mycontext['ipList2'] = networkB
-
-    # Choose which ipList to use
-    if mycontext['ip'] in networkB:
-      mycontext['ipList'] = networkB
-
 
 # ------------------------------------------------------------------------------
 # Main entry point of the program. Initalizes global variables in mycontext
@@ -326,16 +350,35 @@ def toggleSegmentation():
 if callfunc == 'initialize':
   # Running remotely (assuming that we pass one input argument only when we run remotely):
   # whenever this vessel gets a connection on its IPaddress:Clearinghouseport it'll call function board
+  # if len(callargs) == 1:
+  #   port = int(callargs[0])
+  #   myIp = getmyip()
+  #
+  #   vesselIPs = []
+  #   ipList = open('iplist.txt', 'r')
+  #   vesselIPs = [ip.rstrip() for ip in ipList]
+  #   ipList.close()
+  #
+  #   mycontext['ipList'] = vesselIPs
+
   if len(callargs) == 1:
-    port = int(callargs[0])
-    myIp = getmyip()
+  port = int(callargs[0])
+  ip = getmyip()
 
-    vesselIPs = []
-    ipList = open('iplist.txt', 'r')
-    vesselIPs = [ip.rstrip() for ip in ipList]
-    ipList.close()
+  vesselIPs = []
+  ipList = open('iplist.txt', 'r')
+  counter = 0
+  for ipaddr in ipList:
+    ipaddr = ipaddr.rstrip()
+    if not ipaddr == ip:
+      vesselIPs.append(ipaddr)
+    else:
+      mycontext['vesselID'] = counter
 
-    mycontext['ipList'] = vesselIPs
+    counter += 1
+
+  ipList.close()
+  mycontext['iplist'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
@@ -356,7 +399,7 @@ if callfunc == 'initialize':
 
   #Initialize Port and IP
   mycontext['port'] = port
-  mycontext['ip'] = myIp
+  mycontext['ip'] = ip
 
   #read header and footer html files
   mycontext['headerhtml'] = file("header.html").read()
@@ -368,8 +411,8 @@ if callfunc == 'initialize':
 
   start_board()
 
-  #settimer(15, toggleSegmentation, [])
-  #settimer(30, toggleSegmentation, [])
+  settimer(15, toggleSegmentation, [])
+  settimer(30, toggleSegmentation, [])
 
   #Sets a timer that when it expires will start a new thread to call a function with a set of arguments. The thread is charged to your program when you set the timer (instead of when the timer fires). This function returns a timer handle that may be used to cancel the timer before the thread is started.
 
