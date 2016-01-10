@@ -53,12 +53,12 @@ def sendChanges(msg):
     if ip != mycontext['ip']:
       try:
         #segmentation with 6 vessels => 2 networks
-        if mycontext['segmentation']:
-          if mycontext['vesselID'] < 3 and counter < 3:
+        if mycontext['segmented']:
+          if mycontext['vesselID'] < VESSELS/2 and counter < VESSELS/2:
             socketobject = openconn(ipaddr, mycontext['port'])
             socketobject.send(msg)
             socketobject.close()
-          elif mycontext['vesselID'] >= 3 and counter >= 3:
+          elif mycontext['vesselID'] >= VESSELS/2 and counter >= VESSELS/2:
             socketobject = openconn(ipaddr, mycontext['port'])
             socketobject.send(msg)
             socketobject.close()
@@ -362,23 +362,22 @@ if callfunc == 'initialize':
   #   mycontext['ipList'] = vesselIPs
 
   if len(callargs) == 1:
-  port = int(callargs[0])
-  ip = getmyip()
+    port = int(callargs[0])
+    ip = getmyip()
 
-  vesselIPs = []
-  ipList = open('iplist.txt', 'r')
-  counter = 0
-  for ipaddr in ipList:
-    ipaddr = ipaddr.rstrip()
-    if not ipaddr == ip:
-      vesselIPs.append(ipaddr)
-    else:
-      mycontext['vesselID'] = counter
+    vesselIPs = []
+    ipList = open('iplist.txt', 'r')
+    counter = 0
+    for ipaddr in ipList:
+      ipaddr = ipaddr.rstrip()
+      if not ipaddr == ip:
+        vesselIPs.append(ipaddr)
+      else:
+        mycontext['vesselID'] = counter
+      counter += 1
 
-    counter += 1
-
-  ipList.close()
-  mycontext['iplist'] = vesselIPs
+    ipList.close()
+    mycontext['ipList'] = vesselIPs
 
   # To run locally: use the loopback ip address (127.0.0.1) and a port in the range 63100 .. 63110
   # If you start multiple local instances using different ports, you can debug and test your code locally
@@ -411,8 +410,8 @@ if callfunc == 'initialize':
 
   start_board()
 
-  settimer(15, toggleSegmentation, [])
-  settimer(30, toggleSegmentation, [])
+  #settimer(15, toggleSegmentation, [])
+  #settimer(30, toggleSegmentation, [])
 
   #Sets a timer that when it expires will start a new thread to call a function with a set of arguments. The thread is charged to your program when you set the timer (instead of when the timer fires). This function returns a timer handle that may be used to cancel the timer before the thread is started.
 
